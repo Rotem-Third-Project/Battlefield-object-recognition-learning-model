@@ -8,5 +8,5 @@
     "terminal.integrated.defaultProfile.linux": "bash"
   },
   "extensions": ["ms-python.python", "ms-azuretools.vscode-docker"],
-  "postCreateCommand": "pip list && echo '✅ 컨테이너 환경 구성이 완료되었습니다!'"
+  "postCreateCommand": "set -ex && . .venv/bin/activate && pip list && echo '✅ 컨테이너 환경 구성이 완료되었습니다!'"
 }
