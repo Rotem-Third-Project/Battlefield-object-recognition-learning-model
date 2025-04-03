@@ -25,3 +25,5 @@ code . --reuse-window
 >>	GitHub Copilot | Microsoft | 깃허브 인공지능<br>
 >>  Git Graph | mhutchie | 깃허브 로그 추적 유용<br>
 >>  tldraw | tldraw | 그리기 도구
+10. *요청 시에만 터미널에 컨테이너 재빌드
+<pre><code>devcontainer rebuild</code></pre>
