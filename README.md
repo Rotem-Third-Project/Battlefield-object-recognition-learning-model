@@ -20,3 +20,8 @@ code . --reuse-window
 7. VS Code 왼쪽 확장 마켓(🧩 아이콘)에서 다음 확장을 설치해주세요:<br>
 ![image](https://github.com/user-attachments/assets/1931a5bd-6c69-446a-8335-7ea325c44e06)
 >>.devcontainer를 인식하고 Docker 컨테이너로 개발 가능하게 해줍니다.
+8. 편집창에서 devcontainer.json을 열면 아래 알림이 뜨고 Reopen in Container 버튼 클릭합니다.
+9. 별도 확장으로 다음을 추천합니다.
+>>	GitHub Copilot | Microsoft | 깃허브 인공지능<br>
+>>  Git Graph | mhutchie | 깃허브 로그 추적 유용<br>
+>>  tldraw | tldraw | 그리기 도구
