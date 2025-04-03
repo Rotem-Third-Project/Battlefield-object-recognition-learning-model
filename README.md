@@ -25,3 +25,8 @@ code . --reuse-window
 >>	GitHub Copilot | Microsoft | 깃허브 인공지능<br>
 >>  Git Graph | mhutchie | 깃허브 로그 추적 유용<br>
 >>  tldraw | tldraw | 그리기 도구
+>>
+10. commit할때 username오류가 발생하면 devcontainer가 있는 폴더위치에서 터미널에 아래 명령어를 수정하여 입력합니다.
+<pre><code>git config --global user.name "홍길동"
+>> git config --global user.email "your.email@example.com"
+</code></pre>
