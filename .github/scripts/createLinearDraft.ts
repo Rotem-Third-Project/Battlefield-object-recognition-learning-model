@@ -12,15 +12,19 @@ async function main() {
   const team = teams.nodes.find((t) => t.name === "Hyundairotem_ai2");
   if (!team) throw new Error("팀을 찾을 수 없습니다.");
 
-  // ✅ 최종: mutation 사용
-  await linear.mutation.issueCreate({
-    input: {
-      teamId: team.id,
-      title,
-      description,
-      draft: true,
-    },
-  });
+  // ✅ GraphQL mutation 직접 호출
+  await linear.client.request(`
+    mutation {
+      issueCreate(input: {
+        teamId: "${team.id}",
+        title: "${title}",
+        description: "${description}",
+        draft: true
+      }) {
+        success
+      }
+    }
+  `);
 
   console.log("✅ Linear Draft 이슈가 성공적으로 생성되었습니다!");
 }
