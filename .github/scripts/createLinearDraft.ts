@@ -10,17 +10,17 @@ async function main() {
 
   const teams = await linear.teams();
   const team = teams.nodes.find((t) => t.name === "Hyundairotem_ai2");
-
   if (!team) throw new Error("팀을 찾을 수 없습니다.");
 
-  await linear.issueCreate({
+  // ✅ 수정된 부분
+  await linear.issues.create({
     teamId: team.id,
     title,
     description,
     draft: true,
   });
 
-  console.log("✅ Linear Draft 생성 완료!");
+  console.log("✅ Linear Draft 이슈가 생성되었습니다!");
 }
 
 main().catch((e) => {
