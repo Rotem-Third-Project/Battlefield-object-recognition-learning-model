@@ -1,0 +1,30 @@
+# .github/workflows/create-linear-draft.yml
+name: Create Linear Draft on Push to Main
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  create-draft:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install @linear/sdk node-fetch
+
+      - name: Compile & Run Draft Issue Creator
+        env:
+          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
+          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
+        run: |
+          npx tsx .github/scripts/createLinearDraft.ts
