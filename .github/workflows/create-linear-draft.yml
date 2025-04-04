@@ -1,4 +1,3 @@
-# .github/workflows/create-linear-draft.yml
 name: Create Linear Draft on Push to Main
 
 on:
@@ -16,7 +15,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install dependencies
         run: |
@@ -24,7 +23,6 @@ jobs:
 
       - name: Compile & Run Draft Issue Creator
         env:
-          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
-          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }} # ✅ 필수!
         run: |
           npx tsx .github/scripts/createLinearDraft.ts
