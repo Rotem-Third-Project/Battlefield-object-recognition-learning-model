@@ -1,0 +1,16 @@
+# Bytecode
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# dotenv
+.env
