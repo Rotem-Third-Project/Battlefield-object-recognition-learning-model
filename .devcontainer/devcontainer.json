@@ -16,5 +16,5 @@
       ]
     }
   },
-  "postCreateCommand": "python -m venv .venv && . .venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt && pip list && echo '✅ 컨테이너 환경 구성 완료!'"
+  "postCreateCommand": "python -m venv .venv && . .venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt && pip list && npm install --save @linear/sdk && npm install --save-dev @types/node && echo '✅ 컨테이너 환경 구성 완료!'"
 }
