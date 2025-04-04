@@ -1,15 +1,15 @@
-name: Create Linear Draft on Push to Main
+name: Create or Comment Linear Issue on Push
 
 on:
   push:
     branches: [main]
 
 jobs:
-  create-draft:
+  handle-linear:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Set up Node.js
@@ -19,10 +19,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install @linear/sdk node-fetch
+          npm install tsx @linear/sdk
 
-      - name: Compile & Run Draft Issue Creator
+      - name: Run Linear Issue Handler
         env:
-          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }} # ✅ 필수!
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
         run: |
           npx tsx .github/scripts/createLinearDraft.ts
