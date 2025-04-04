@@ -21,7 +21,8 @@ async function main() {
     return;
   }
 
-  const searchResult = await linear.searchIssues({ query: issueIdentifier });
+  // ✅ term은 string이어야 함!
+  const searchResult = await linear.searchIssues({ term: issueIdentifier });
   const parentIssue = searchResult.nodes[0];
   if (!parentIssue) {
     console.log("해당 이슈를 찾을 수 없습니다.");
