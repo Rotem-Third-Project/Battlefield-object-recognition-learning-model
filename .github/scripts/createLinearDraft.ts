@@ -20,7 +20,15 @@ async function main() {
   const issueIdentifier = issueIdMatch?.[1];
 
   if (!issueIdentifier) {
-    console.log("⚠️ 이슈 키를 찾을 수 없습니다. 이슈와 연결할 수 없습니다.");
+    console.log("⚠️ 이슈 키를 찾을 수 없습니다. 새 이슈를 생성합니다.");
+
+    const newIssue = await linear.issueCreate({
+      teamId: team.id,
+      title,
+      description,
+    });
+
+    console.log(`✅ 새 이슈가 생성되었습니다: ${newIssue.issue.identifier}`);
     return;
   }
 
