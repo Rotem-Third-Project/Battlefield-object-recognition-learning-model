@@ -4,4 +4,5 @@ from PIL import Image
 img = Image.open("../data/test/image.png")
 
 # 이미지 보기
-img.show()##
+img.show()
+#####
