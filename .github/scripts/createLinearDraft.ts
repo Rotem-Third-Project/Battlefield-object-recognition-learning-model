@@ -24,9 +24,22 @@ async function main() {
     return;
   }
 
-  // 이슈 키로 기존 이슈 검색 (검색어는 문자열이어야 함)
-  const searchResult = await linear.searchIssues({ term: issueIdentifier });
-  const parentIssue = searchResult.nodes[0];
+  // 🔧 이슈 키로 기존 이슈 검색 (term은 단순 문자열이어야 함)
+  const searchResult = await linear.client.request(
+    `
+    query SearchIssues($term: String!) {
+      searchIssues(term: $term) {
+        nodes {
+          id
+          title
+        }
+      }
+    }
+  `,
+    { term: issueIdentifier } // ✅ 문자열로 전달
+  );
+
+  const parentIssue = searchResult.searchIssues.nodes[0];
 
   if (!parentIssue) {
     console.log(
