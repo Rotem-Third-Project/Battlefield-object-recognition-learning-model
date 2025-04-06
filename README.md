@@ -13,7 +13,7 @@
 >>Docker version 24.x.x, build ... 🟢
 5. 리포지토리를 설치할 폴더(예: `Documents/Projects`)로 이동합니다.
 6. 터미널에서 아래 명령어를 입력합니다.
-<pre><code>git clone https://github.com/Rotem-Third-Project/Battlefield-object-recognition-learning-model/Docker-setup.git
+<pre><code>git clone https://github.com/Rotem-Third-Project/Battlefield-object-recognition-learning-model/tree/Docker-setup.git
 cd Battlefield-object-recognition-learning-model
 code . --reuse-window
 </code></pre>
