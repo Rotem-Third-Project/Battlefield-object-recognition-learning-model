@@ -13,7 +13,6 @@ code . --reuse-window
 ```
 📁 루트 폴더
 ├── .devcontainer/   # Dev Container 개발 환경 설정 파일
-├── .venv/ 
 ├── app/   # 메인 애플리케이션 코드
 ├── data/   # 이미지 등 샘플 데이터 저장
 ├── test/   # 테스트 코드 모음
@@ -94,4 +93,5 @@ fix: HYU-12 전처리 누락 수정
 
 docs: 정리 완료 HYU-12-m
 # → HYU-12 이슈에 댓글 추가
+```
 <!-- ISSUE-AUTO-GUIDE-END -->
