@@ -1,0 +1,37 @@
+name: 📄 Update README Structure
+
+on:
+  push:
+    branches: [main] # main 브랜치에 push될 때 실행
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: 📦 Install dependencies
+        run: npm install --save-dev ts-node typescript
+
+      - name: 🛠️ Update README structure
+        run: npx ts-node --project .github/config/tsconfig.json .github/scripts/updateReadme.ts
+
+      - name: ✅ Commit and push changes if README updated
+        run: |
+          git config --global user.name "🤖 자동 커밋 로봇"
+          git config --global user.email "autobot@README.update"
+
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "✅ No README changes to commit"
+          else
+            git commit -m "📦 프로젝트 구조 업데이트 (bot)"
+            git push
+          fi
