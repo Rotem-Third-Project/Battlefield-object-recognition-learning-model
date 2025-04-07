@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v3
+        with:
+          persist-credentials: false
 
       - name: 🧰 Install dependencies
         run: npm install --save-dev ts-node typescript
