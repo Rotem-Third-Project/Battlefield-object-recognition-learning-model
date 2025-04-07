@@ -26,30 +26,28 @@ async function main() {
     return;
   }
 
-  // 🧭 메인 브랜치 여부 판단
   const isMain = branchName === "main";
-  const battlefieldProjectName = "battlefield-object-recognition-learning-model";
+  const battlefieldProjectName = "Battlefield-object-recognition-learning-model";
 
-  // 🔎 프로젝트 가져오기
+  // 🔎 팀 및 프로젝트 조회
   const teams = await linear.teams();
   const team = teams.nodes.find(t => t.name === "Hyundairotem_ai2");
   if (!team) throw new Error("❌ Linear 팀을 찾을 수 없습니다.");
 
   const allProjects = await linear.projects();
-  const project = allProjects.nodes.find(p => {
+  let project = allProjects.nodes.find(p => {
     return isMain
       ? p.name === battlefieldProjectName
       : p.name === branchName;
   });
 
   if (!project) {
-    console.error(`❌ '${branchName}'에 해당하는 프로젝트를 찾을 수 없습니다.`);
+    console.error(`❌ '${isMain ? battlefieldProjectName : branchName}'에 해당하는 프로젝트를 찾을 수 없습니다.`);
     return;
   }
 
   const state = (await linear.workflowStates({ filter: { team: { id: { eq: team.id } } } }))
     .nodes.find(s => s.name.toLowerCase() === "in progress");
-
   if (!state) throw new Error("❌ 'In Progress' 상태를 찾을 수 없습니다.");
 
   // 💬 HYU-12-m → 댓글 등록
@@ -79,10 +77,15 @@ async function main() {
   // 🧩 HYU-12 → 서브이슈 생성
   if (/^HYU-\d+$/.test(key)) {
     const issue = await findIssueByKey(key);
+    if (!issue) {
+      console.error(`⚠️ ${key} 이슈를 찾을 수 없습니다.`);
+      return;
+    }
+
     const sub = await createIssue({
       teamId: team.id,
       title: message,
-      parentId: issue?.id,
+      parentId: issue.id,
       projectId: project.id,
       labelIds: await findLabelIds(["improvement"]),
       stateId: state.id,
