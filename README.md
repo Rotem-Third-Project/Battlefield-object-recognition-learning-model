@@ -141,7 +141,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 5000
 
 ### 🧠 실행 구조 다이어그램 (Mermaid)
 ```mermaid
-flowchart LR
+flowchart TD
     A[Start] --> B{환경 선택}
     B -->|Docker| C[컨테이너 진입: docker exec -it suspicious_buck bash]
     B -->|Windows| F[가상환경 활성화: .venv\\Scripts\\activate]
