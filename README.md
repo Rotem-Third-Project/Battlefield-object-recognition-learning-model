@@ -95,3 +95,61 @@ docs: 정리 완료 HYU-12-m
 # → HYU-12 이슈에 댓글 추가
 ```
 <!-- ISSUE-AUTO-GUIDE-END -->
+
+---
+
+## 🚀 FastAPI 수동 실행 가이드 (Docker & Windows)
+
+FastAPI 서버는 자동 실행되지 않습니다. 아래의 명령어를 통해 수동으로 실행해야 합니다.
+
+---
+
+### 🐳 Docker 환경에서 실행
+
+#### 📌 1. 컨테이너 진입
+
+현재 컨테이너 이름: `suspicious_buck`
+
+```bash
+docker exec -it suspicious_buck bash
+```
+#### 📌 2. 가상환경 활성화
+
+```bash
+source .venv/bin/activate
+```
+
+#### 📌 3. FastAPI 서버 실행
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 5000
+```
+### 💻 Windows 로컬 환경에서 실행
+
+#### 📌 1. 가상환경 활성화
+
+```bash
+.\.venv\Scripts\activate
+```
+
+#### 📌 2. FastAPI 서버 실행
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 5000
+```
+
+### 🧠 실행 구조 다이어그램 (Mermaid)
+```
+flowchart TD
+    A[Start] --> B{환경}
+    B -->|Docker| C[컨테이너 진입<br/>docker exec -it suspicious_buck bash]
+    B -->|Windows| F[가상환경 활성화<br/>.venv\\Scripts\\activate]
+
+    C --> D[가상환경 활성화<br/>source .venv/bin/activate]
+    D --> E[uvicorn app.main:app]
+    F --> E
+
+    E --> G[FastAPI 서버 시작<br/>http://localhost:5000]
+```
+
+---
