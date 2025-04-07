@@ -3,9 +3,11 @@ name: 🧾 README 디렉토리 구조 자동 업데이트
 on:
   push:
     branches: [main]
+    paths:
+      - "/*"
 
 permissions:
-  contents: write  # ✅ GITHUB_TOKEN이 push할 수 있도록 권한 부여
+  contents: write
 
 jobs:
   update-readme:
@@ -15,7 +17,7 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v3
         with:
-          persist-credentials: false  # ✅ remote에 기존 인증 제거
+          persist-credentials: false
 
       - name: 🧰 Install dependencies
         run: npm install --save-dev ts-node typescript
