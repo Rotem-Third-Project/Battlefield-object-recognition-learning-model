@@ -1,16 +1,16 @@
-# Bytecode
+# 🔸 Python 바이트코드 파일 (자동 생성됨, 불필요)
 __pycache__/
 *.pyc
 
-# Virtual env
+# 🐍 가상환경 디렉토리 (패키지 설치용, 공유 불필요)
 .venv/
 
-# VS Code
+# 🧩 VS Code 에디터 설정 (개인 개발 환경)
 .vscode/
 
-# OS
-.DS_Store
-Thumbs.db
+# 💻 운영체제에서 생성하는 임시 파일
+.DS_Store    # macOS
+Thumbs.db    # Windows
 
-# dotenv
+# 🔐 민감한 정보가 담긴 환경 설정 파일
 .env

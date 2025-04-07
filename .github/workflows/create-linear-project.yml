@@ -1,0 +1,28 @@
+name: 🪄 브랜치 기반 Linear 프로젝트 생성
+
+on:
+  create:
+    branches:
+      - '**'  # 모든 브랜치 생성 시 감지
+
+permissions:
+  contents: read
+
+jobs:
+  create-linear-project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧰 Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: 📦 Install deps
+        run: npm install @linear/sdk
+
+      - name: 🚀 Create Linear project
+        env:
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: node .github/scripts/createLinearProject.js

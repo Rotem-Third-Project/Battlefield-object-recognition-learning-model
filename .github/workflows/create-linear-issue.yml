@@ -1,0 +1,28 @@
+name: 🧠 Linear 이슈 처리 자동화
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  linear-issue-handler:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 레포지토리 체크아웃
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Node.js 설정
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: 📦 의존성 설치
+        run: npm install tsx typescript @linear/sdk
+
+      - name: 🚀 Linear 이슈 처리 실행
+        env:
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: npx tsx .github/scripts/createLinearIssue.ts

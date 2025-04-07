@@ -1,0 +1,47 @@
+name: 🧾 README 디렉토리 구조 자동 업데이트
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "/*"
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - name: 🧰 Install dependencies
+        run: npm install --save-dev ts-node typescript
+
+      - name: ⚙️ Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: 🛠️ Update README structure
+        run: npx ts-node --project .github/config/tsconfig.json .github/scripts/updateReadme.ts
+
+      - name: ✅ Commit and push changes if README updated
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "🤖 자동 커밋 로봇"
+          git config --global user.email "autobot@README.update"
+
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "✅ No README changes to commit"
+          else
+            git commit -m "📦 프로젝트 구조 업데이트 (bot)"
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
+            git push
+          fi
