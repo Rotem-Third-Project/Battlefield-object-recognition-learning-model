@@ -1,3 +1,5 @@
+// 📁 .github/scripts/createLinearProject.ts
+
 import { LinearClient } from "@linear/sdk";
 
 const accessToken = process.env.LINEAR_ACCESS_TOKEN;
@@ -35,7 +37,7 @@ async function run() {
     {
       input: {
         name: branchName,
-        teamId: team.id,
+        teamIds: [team.id], // ✅ 변경된 부분
         state: "started",
       },
     }
