@@ -21,6 +21,15 @@ jobs:
       - name: 📦 Install dependencies
         run: npm install --save-dev tsx @linear/sdk typescript
 
+      - name: 🧪 디버깅 - 스크립트 파일 존재 확인
+        run: |
+          echo "📂 현재 디렉토리 구조:"
+          ls -al
+          echo "📂 .github 디렉토리 구조:"
+          ls -al .github
+          echo "📂 .github/scripts 디렉토리 구조:"
+          ls -al .github/scripts
+
       - name: 🚀 Create Linear project from branch
         env:
           LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
