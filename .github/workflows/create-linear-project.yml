@@ -3,7 +3,7 @@ name: 🪄 브랜치 기반 Linear 프로젝트 생성
 on:
   create:
     branches:
-      - '**'  # 모든 브랜치 생성 시 감지
+      - "**" # 모든 브랜치 생성 시 감지
 
 permissions:
   contents: read
@@ -18,11 +18,11 @@ jobs:
         with:
           node-version: "20"
 
-      - name: 📦 Install deps
-        run: npm install @linear/sdk
+      - name: 📦 Install dependencies
+        run: npm install --save-dev tsx @linear/sdk typescript
 
-      - name: 🚀 Create Linear project
+      - name: 🚀 Create Linear project from branch
         env:
           LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
           BRANCH_NAME: ${{ github.ref_name }}
-        run: node .github/scripts/createLinearProject.js
+        run: npx tsx .github/scripts/createLinearProject.ts
