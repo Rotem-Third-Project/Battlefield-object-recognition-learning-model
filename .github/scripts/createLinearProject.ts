@@ -23,7 +23,20 @@ async function run() {
     throw new Error("❌ Linear 팀 'Hyundairotem_ai2'을 찾을 수 없습니다.");
   }
 
-  const result = await client.client.request(
+  interface CreateProjectResponse {
+    projectCreate: {
+      success: boolean;
+      project: {
+        name: string;
+        id: string;
+      };
+    };
+  }
+
+  const result = await client.client.request<
+    CreateProjectResponse,
+    { input: { name: string; teamId: string; state: string } }
+  >(
     `
     mutation CreateProject($input: ProjectCreateInput!) {
       projectCreate(input: $input) {
