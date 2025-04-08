@@ -1,5 +1,3 @@
-// 📁 .github/scripts/createLinearProject.ts
-
 import { LinearClient } from "@linear/sdk";
 
 const accessToken = process.env.LINEAR_ACCESS_TOKEN;
@@ -15,7 +13,6 @@ const client = new LinearClient({ accessToken });
 async function run() {
   console.log(`📦 '${branchName}' 이름으로 Linear 프로젝트 생성 중...`);
 
-  const me = await client.viewer;
   const teams = await client.teams();
   const team = teams.nodes.find((t) => t.name === "Hyundairotem_ai2");
 
@@ -23,20 +20,7 @@ async function run() {
     throw new Error("❌ Linear 팀 'Hyundairotem_ai2'을 찾을 수 없습니다.");
   }
 
-  interface CreateProjectResponse {
-    projectCreate: {
-      success: boolean;
-      project: {
-        name: string;
-        id: string;
-      };
-    };
-  }
-
-  const result = await client.client.request<
-    CreateProjectResponse,
-    { input: { name: string; teamId: string; state: string } }
-  >(
+  const result = await client.client.request(
     `
     mutation CreateProject($input: ProjectCreateInput!) {
       projectCreate(input: $input) {
@@ -50,7 +34,7 @@ async function run() {
     `,
     {
       input: {
-        name: branchName || "Default Project Name",
+        name: branchName,
         teamId: team.id,
         state: "started",
       },
