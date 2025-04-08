@@ -50,7 +50,7 @@ async function run() {
     `,
     {
       input: {
-        name: branchName,
+        name: branchName || "Default Project Name",
         teamId: team.id,
         state: "started",
       },
