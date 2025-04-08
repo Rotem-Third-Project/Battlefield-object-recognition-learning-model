@@ -2,8 +2,7 @@ name: ✅ 브랜치 병합/삭제 시 Linear 프로젝트 완료 처리
 
 on:
   delete:
-    branches:
-      - "[*]"
+    branches: ["*"]
   pull_request:
     types:
       - closed
