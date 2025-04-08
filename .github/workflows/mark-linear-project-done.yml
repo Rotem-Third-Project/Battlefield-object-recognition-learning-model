@@ -33,4 +33,4 @@ jobs:
           fi
 
           echo "🧠 완료 처리할 브랜치: $BRANCH_NAME"
-          npx tsx .github/scripts/markProjectDone.ts
+          npx tsx ./.github/scripts/markProjectDone.ts
