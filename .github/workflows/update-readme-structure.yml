@@ -3,7 +3,7 @@ name: 🧾 README 디렉토리 구조 자동 업데이트
 on:
   push:
     branches: [main]
-    paths: ["/*"]
+  paths: ["/*"]
 
 permissions:
   contents: write
