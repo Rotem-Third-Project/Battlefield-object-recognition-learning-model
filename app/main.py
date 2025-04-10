@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
-import os  # 파일 다루기 위해서
 from ultralytics import YOLO
+import numpy as np
+import cv2
 
 app = Flask(__name__)  # 플라스크 객체 선언
 current_position = None
@@ -20,6 +21,15 @@ TOLERANCE = 200
 action_command = []
 move_command = []
 
+kalman = cv2.KalmanFilter(4, 2)
+kalman.transitionMatrix = np.array(
+    [[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32
+)
+kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+kalman.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
+kalman.measurementNoiseCov = np.eye(2, dtype=np.float32) * 1
+kalman.statePre = np.array([[960], [883], [0], [0]], dtype=np.float32)
+
 
 @app.route("/detect", methods=["POST"])
 def detect():
@@ -32,17 +42,15 @@ def detect():
 
     results = model.track(image_path, persist=True)
     boxes = results[0].boxes
-
     detections = boxes.data.cpu().numpy()
 
     target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
     result_json = []
-    truck_target_found = False
+    target_candidates = []
 
+    # 후보 수집
     for box in detections:
         class_id = int(box[5])
-
-        # 유효한 클래스만 저장
         if class_id in target_classes:
             result_json.append(
                 {
@@ -52,28 +60,41 @@ def detect():
                 }
             )
 
-        # 트럭 조준 판단
-        if not truck_target_found and class_id == 0:
+        if class_id == 0:  # person만 추적 대상으로
             x1, y1, x2, y2 = box[:4]
             cx = (x1 + x2) / 2
-            dx = cx - BARREL_X
-            print("x1:", x1, "y1:", y1, "x2:", x2, "y2:", y2)
+            cy = (y1 + y2) / 2
+            dist = abs(cx - BARREL_X)
+            target_candidates.append((dist, cx, cy, box))
 
-            if dx > TOLERANCE:
-                action_command.append("E")
-            elif dx < -TOLERANCE:
-                action_command.append("Q")
-            else:
-                action_command.append(" ")
-                print("dx값:", dx, "cx값: ", cx)
+    # 타겟 선택 및 조준 판단
+    if target_candidates:
+        # 중앙과 가까운 순으로 정렬
+        target_candidates.sort(key=lambda x: x[0])
+        _, cx, cy, _ = target_candidates[0]
 
-            truck_target_found = True
+        # Kalman 필터 예측 + 보정
+        kalman.predict()
+        measurement = np.array([[np.float32(cx)], [np.float32(cy)]])
+        corrected = kalman.correct(measurement)
+        kx, ky = corrected[:2].flatten()
 
-        # 트럭을 감지하지 못했다면 기본 명령 추가
-        if not truck_target_found:
+        dx = kx - BARREL_X
+
+        if dx > TOLERANCE:
+            action_command.append("E")
+        elif dx < -TOLERANCE:
+            action_command.append("Q")
+        else:
             action_command.append(" ")
-        print("Action Command Queue:", action_command)
-        return jsonify(result_json)
+
+        print(f"[Kalman] cx: {cx:.2f}, kx: {kx:.2f}, dx: {dx:.2f}")
+    else:
+        action_command.append(" ")
+        print("[Kalman] 타겟 없음 - 정지")
+
+    print("Action Command Queue:", action_command)
+    return jsonify(result_json)
 
 
 @app.route(
@@ -92,12 +113,6 @@ def set_destination():
         return jsonify({"status": "OK", "message": "success"})
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)}), 400
-    # 현재 위치가 저장되지 않았으면 에러 반환
-    # if current_position is None:
-    #    return jsonify({"status" : "ERROR", "message" : "현재 위치가 설정되지 않았습니다. /update"})
-
-    # try:
-    #   x_dest, _, z_dest = map(float, destination.split(","))
 
 
 @app.route("/get_action", methods=["GET"])
