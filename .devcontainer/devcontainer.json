@@ -1,0 +1,17 @@
+{
+  "name": "Battlefield Python Dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/app",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": ["ms-python.python", "ms-azuretools.vscode-docker"]
+    }
+  },
+  "postCreateCommand": "set -ex && python -m venv .venv && . .venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt && pip list && npm install --save @linear/sdk && npm install --save-dev @types/node && echo '✅ 컨테이너 환경 구성 완료!'"
+}
