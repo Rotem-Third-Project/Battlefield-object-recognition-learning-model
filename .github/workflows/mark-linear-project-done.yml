@@ -1,0 +1,36 @@
+name: ✅ 브랜치 병합/삭제 시 Linear 프로젝트 완료 처리
+
+on:
+  delete:
+    branches: ["*"]
+  pull_request:
+    types: [closed]
+
+jobs:
+  complete-linear-project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📦 Node.js 환경 준
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: 🛠️ 필요한 패키지 설치
+        run: npm install tsx @linear/sdk
+
+      - name: 🧠 BRANCH_NAME 설정 및 프로젝트 완료 처리
+        env:
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
+        run: |
+          # 브랜치 이름 추출
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            export BRANCH_NAME="${{ github.head_ref }}"
+          else
+            export BRANCH_NAME="${{ github.event.ref }}"  # refs/heads/브랜치
+            BRANCH_NAME="${BRANCH_NAME#refs/heads/}"       # 접두어 제거
+            export BRANCH_NAME
+          fi
+
+          echo "🧠 완료 처리할 브랜치: $BRANCH_NAME"
+          npx tsx ./.github/scripts/markProjectDone.ts

@@ -1,0 +1,26 @@
+name: 🧪 Linear 프로젝트 목록 출력
+
+on:
+  workflow_dispatch:  # 수동 실행용 트리거
+
+jobs:
+  list-linear-projects:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: 📦 Install tsx
+        run: npm install --save-dev tsx @linear/sdk typescript
+
+      - name: 🔍 프로젝트 목록 조회
+        env:
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
+        run: |
+          npx tsx .github/scripts/debugLinearProjects.ts

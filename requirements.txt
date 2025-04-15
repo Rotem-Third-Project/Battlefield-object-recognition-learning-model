@@ -1,1 +1,5 @@
 numpy
+fastapi
+uvicorn[standard]
+torch
+ultralytics
