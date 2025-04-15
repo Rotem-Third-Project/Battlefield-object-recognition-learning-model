@@ -157,12 +157,3 @@ flowchart TD
 ```
 
 ---
-## 기능 설명
-### 객체 탐지 모델
-객체 탐지 모델에는 Two-Stage Detector과 One-Stage Detector이 있다.
-Two-Stage Detector은 먼저 **물체가 있을 법한 영역(Region Proposal)**을 찾고, 그 영역을 다시 분류 및 박스 회귀하는 방식이다.
-One-Stage Detector은 한 번에 물체 위치와 클래스 예측까지 처리하는 방식이다.
-Two-Stage Detector은 정확도면에서 우수하나 실시간으로 적을 탐지해야하는 우리의 전차는 처리속도가 빠른__One-Stage Detector__을 선택했다.
-One-Stage Detector의 대표적인 모델 중 YOLO모델을 채택하였다.
-
-$$ IoU = 예측 박스와 정답 박스의 합집합 영역 / 예측 박스와 정답 박스의 교집합 영역 $$ 
