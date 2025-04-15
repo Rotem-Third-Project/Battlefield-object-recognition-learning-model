@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+print("remote success")
+#fsdfsdsdfasdf
+
+=======
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -121,3 +126,4 @@ class ObstacleData(BaseModel):
 async def update_obstacle(obstacle_data: ObstacleData):
     print("Received obstacle data:", obstacle_data.obstacle)
     return {"status": "success", "message": "Obstacle data received"}
+>>>>>>> bafcb3b73761b907bd2dea13760740b16d9219c7
