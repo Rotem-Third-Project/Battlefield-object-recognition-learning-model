@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>🪖 전차 전투 대시보드</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <!-- ✅ 시뮬레이터 실시간 영상 (MJPEG) -->
+    <div class="video-wrapper">
+      <img id="mjpeg-stream" src="/proxy_stream" alt="전차 시뮬레이터 영상" />
+    </div>
+
+    <!-- ✅ HUD 패널 -->
+    <div class="hud">
+      <div class="hud-item" id="speed">속도: 0 km/h</div>
+
+      <div class="hud-item" id="health">
+        <div>전차 체력</div>
+        <div class="health-bar">
+          <div id="health-fill" class="health-fill"></div>
+        </div>
+        <div id="health-text">100%</div>
+      </div>
+
+      <div class="hud-item danger" id="threat">🚨 위협 감지: 없음</div>
+
+      <div class="hud-item" id="comm">
+        <div>📡 통신 신호</div>
+        <div class="signal-bar">
+          <div class="bar" id="bar1"></div>
+          <div class="bar" id="bar2"></div>
+          <div class="bar" id="bar3"></div>
+          <div class="bar" id="bar4"></div>
+        </div>
+      </div>
+
+      <div class="hud-item" id="position">좌표: 없음</div>
+      <div class="hud-item" id="gear">
+        🔧 기어: <span id="gear-level">2</span>
+      </div>
+    </div>
+
+    <!-- ✅ 알림창 -->
+    <div id="alert-box" class="alert hidden">알림창</div>
+
+    <!-- ✅ 목적지 입력 -->
+    <div class="command-panel">
+      <input type="text" id="destInput" placeholder="x,y,z" />
+      <button onclick="sendDestination()">📍 목적지 설정</button>
+      <button onclick="sendBullet()">💥 발사</button>
+    </div>
+
+    <!-- ✅ JS 로직 -->
+    <script src="/static/js/dashboard.js"></script>
+  </body>
+</html>
