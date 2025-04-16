@@ -15,6 +15,9 @@ code . --reuse-window
 ├── .devcontainer/   # Dev Container 개발 환경 설정 파일
 ├── app/   # 메인 애플리케이션 코드
 ├── data/   # 이미지 등 샘플 데이터 저장
+├── models/ 
+├── static/ 
+├── templates/ 
 └── test/   # 테스트 코드 모음
 
 📄 루트 파일
@@ -24,6 +27,8 @@ code . --reuse-window
 ├── package.json   # Node.js 프로젝트 설정 및 의존성 정의 파일
 ├── requirements.txt   # Python 의존성 정의 파일
 ├── robo.py 
+├── temp_image.jpg 
+├── yolov8n.pt 
 └── 요구사항정의서.md 
 ```
 <!-- STRUCTURE-END -->
