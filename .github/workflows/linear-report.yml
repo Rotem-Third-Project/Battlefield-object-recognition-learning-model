@@ -1,11 +1,7 @@
-name: 🧭 Linear 보고서 생성
+name: 🧭 Linear 프로젝트 일정 Gantt 리포트
 
 on:
   workflow_dispatch:
-    inputs:
-      roadmapName:
-        description: "로드맵 이름 (예: Vision 2025)"
-        required: true
 
 jobs:
   generate-report:
@@ -23,10 +19,10 @@ jobs:
       - name: 📦 의존성 설치
         run: npm install tsx typescript @linear/sdk
 
-      - name: 🧾 리포트 생성
+      - name: 🧾 리포트 생성 (Mermaid Gantt)
         env:
           LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
-        run: npx tsx .github/scripts/generateLinearReport.ts "${{ github.event.inputs.roadmapName }}"
+        run: npx tsx .github/scripts/generateLinearReport.ts
 
       - name: 📦 리포트 업로드
         uses: actions/upload-artifact@v4
