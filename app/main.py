@@ -10,7 +10,7 @@ import shutil
 app = FastAPI()
 
 # Load YOLO model
-model = YOLO('yolov8n.pt')
+model = YOLO('./models/yolov8n.pt')
 
 # Global command lists
 move_command = ["W", "W", "W", "D", "D", "D", "A", "A", "S", "S", "STOP"]
