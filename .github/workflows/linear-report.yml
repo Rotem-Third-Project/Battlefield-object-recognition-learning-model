@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       roadmapName:
-        description: "타임라인인"
+        description: "타임라인"
         required: true
 
 jobs:
