@@ -14,7 +14,7 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-model = YOLO('yolov8n.pt')
+model = YOLO('./models/yolov8n.pt')
 connected_clients = []
 
 move_command_queue = []
