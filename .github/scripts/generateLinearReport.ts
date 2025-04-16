@@ -27,10 +27,14 @@ async function main() {
 
   for (const project of allProjects.nodes) {
     const team = project.team?.name || "(팀 정보 없음)";
-    const start = project.startedAt ? project.startedAt.slice(0, 10) : null;
+    const start = project.startedAt
+      ? new Date(project.startedAt).toISOString().slice(0, 10)
+      : null;
     const end = project.completedAt
-      ? project.completedAt.slice(0, 10)
-      : project.targetDate?.slice(0, 10);
+      ? new Date(project.completedAt).toISOString().slice(0, 10)
+      : project.targetDate
+      ? new Date(project.targetDate).toISOString().slice(0, 10)
+      : null;
 
     if (!start || !end) continue; // 시작일 또는 종료일 없으면 건너뜀
 
