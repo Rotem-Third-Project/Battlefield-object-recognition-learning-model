@@ -1,0 +1,35 @@
+name: 🧭 Linear 보고서 생성
+
+on:
+  workflow_dispatch:
+    inputs:
+      roadmapName:
+        description: "타임라인인"
+        required: true
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Node.js 설정
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: 📦 의존성 설치
+        run: npm install tsx typescript @linear/sdk
+
+      - name: 🧾 리포트 생성
+        env:
+          LINEAR_ACCESS_TOKEN: ${{ secrets.LINEAR_ACCESS_TOKEN }}
+        run: npx tsx .github/scripts/generateLinearReport.ts "${{ github.event.inputs.roadmapName }}"
+
+      - name: 📦 리포트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: linear-report
+          path: ./linear-report.md
