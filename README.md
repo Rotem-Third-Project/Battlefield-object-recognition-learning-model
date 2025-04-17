@@ -23,7 +23,6 @@ code . --reuse-window
 📄 루트 파일
 ├── .gitignore   # Git이 추적하지 않아야 할 파일 및 디렉토리를 정의
 ├── README.md   # 프로젝트 소개 및 사용법 문서
-├── best.pt 
 ├── package-lock.json   # 의존성 버전을 고정하는 자동 생성 파일
 ├── package.json   # Node.js 프로젝트 설정 및 의존성 정의 파일
 ├── requirements.txt   # Python 의존성 정의 파일
