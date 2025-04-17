@@ -4,53 +4,43 @@ import os
 import numpy as np
 import torch
 from ultralytics import YOLO
-import datetime  # 타임스탬프 생성을 위해
-
-# Deep SORT 패키지 임포트 (deep_sort_realtime 사용)
-from deep_sort_realtime.deepsort_tracker import DeepSort
 
 app = Flask(__name__)
 
-# YOLO 모델 로드
-model = YOLO("best_56000.pt")  # 미리 모델을 로드해두면 성능상 유리합니다.
+# YOLO 모델 로드 (미리 로드하여 추론 속도 향상)
+model = YOLO("best_56000.pt")
 
-# Deep SORT 트래커 초기화
-tracker = DeepSort(max_age=30, n_init=3)
+# 전역 변수: 기준(바렐) 중앙 좌표와 터렛 이동 허용 오차 설정
+BARREL_X = 960  # 기준 좌표 (예: 화면 중앙 x좌표)
+TOLERANCE = 15  # 터렛 이동 허용 오차 (픽셀 단위)
+action_command = []  # 터렛 등 액션 명령 저장 (예: {'turret': 'E', 'weight': 1.0})
+SPEED = 0.5
+move_command = [{"move": "W", "weight": SPEED}] * 60
 
-# 전역 변수: 바렐 중앙 좌표 및 허용 오차 설정
-BARREL_X = 960
-TOLERANCE = 50
-# Action commands with weights (15+ variations)
-action_command = []
-# Move commands with weights (11+ variations)
-SPEED = 1.0
-move_command = [{"move": "W", "weight": SPEED}] * 30
-
-# 칼만 필터 설정 (상태 벡터: [x, y, vx, vy], 측정: [x, y])
-kalman = cv2.KalmanFilter(4, 2)
-kalman.transitionMatrix = np.array(
-    [[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32
-)
-kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
-kalman.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
-kalman.measurementNoiseCov = np.eye(2, dtype=np.float32) * 1
-# 초기 상태 (예: 화면 중앙에 가까운 값으로 설정)
-kalman.statePre = np.array([[960], [883], [0], [0]], dtype=np.float32)
+# (이전 코드에 칼만 필터가 있었으나, 현재는 사용하지 않으므로 제거)
 
 # 전역 변수: 마지막 검출된 바운딩 박스 저장 (없으면 None)
 last_candidate_box = None
 
 
 def compute_turret_weight(dx, tolerance):
+    """
+    터렛 이동 거리를 결정하기 위해, 기준 좌표(BARREL_X)와의 수평 차이(dx)에 따라
+    가중치(이동량)를 비선형 방식으로 계산합니다.
+
+    - abs(dx) <= tolerance 인 경우, 이동할 필요가 없으므로 0.0을 반환합니다.
+    - abs(dx) > tolerance 인 경우, 초과한 거리(extra)를 (abs(dx) - tolerance)로 계산합니다.
+      이 값을 100픽셀 단위로 정규화한 후, 3.5 제곱(power 3.5)을 취하고 0.1을 곱하여 weight를 산출합니다.
+      예를 들어, extra가 100픽셀이면 weight = 0.1 * (1)**3.5 = 0.1,
+             extra가 200픽셀이면 weight = 0.1 * (2)**3.5 (즉, 비선형적으로 증가함).
+    - 최종 weight가 10.0을 초과할 경우, 최대값 10.0으로 제한하여 반환합니다.
+    """
     abs_dx = abs(dx)
     if abs_dx <= tolerance:
         return 0.0
     extra = abs_dx - tolerance
-    if extra <= 100:
-        extra_weight = 0.1
-    else:
-        extra_weight = 0.1 + (extra - 100) * 0.008
-    return min(extra_weight, 10.0)
+    extra_weight = 0.1 * (extra / 100) ** 3.5
+    return min(extra_weight, 100.0)
 
 
 @app.route("/detect", methods=["POST"])
@@ -58,12 +48,12 @@ def detect():
     global action_command, last_candidate_box
     action_command.clear()
 
-    # 이미지 읽기 및 저장
+    # 이미지를 수신하여 임시 파일로 저장 (YOLO 추론용)
     image = request.files["image"]
-    # 임시 저장 파일은 계속 덮어쓰지 않고, 원본 이미지는 results 폴더에 저장할 예정
     image_path = "temp_image.jpg"
     image.save(image_path)
 
+    # YOLO 모델로 객체 검출 (deep_sort 추적도 포함)
     results = model.track(image_path, persist=True, show=False)
     boxes = results[0].boxes
     detections = boxes.data.cpu().numpy()
@@ -75,7 +65,7 @@ def detect():
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
 
-    # 후보 수집 및 후처리 (Enemy만 후보로 사용)
+    # 검출된 객체들 중 'Enemy' 클래스만 후보로 선정
     for box in detections:
         class_id = int(box[5])
         if class_id in target_classes:
@@ -87,13 +77,13 @@ def detect():
                 "confidence": normalized_confidence,
             }
             result_json.append(detection_result)
-            if target_classes[class_id] in ["Enemy", "car"]:
+            if class_id == 0:
                 print(
                     "Enemy confidence:",
                     detection_result["confidence"],
                     target_classes[class_id],
                 )
-        if class_id == 0:  # Enemy만 추적 대상으로 사용
+        if class_id == 0:  # 'Enemy' 클래스만 터렛 이동 기준으로 사용
             x1, y1, x2, y2 = box[:4]
             cx = (x1 + x2) / 2
             cy = (y1 + y2) / 2
@@ -103,34 +93,13 @@ def detect():
     # 이미지 로드
     img = cv2.imread(image_path)
 
-    # 현재 타임스탬프 생성 (밀리초까지 포함, 예: "YYYY-MM-DD HH:MM:SS.mmm")
-    now = datetime.datetime.now()
-    timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    cv2.putText(
-        img, timestamp_str, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2
-    )
-
-    # 칼만 필터 예측 단계 항상 수행
-    predicted_state = kalman.predict()
-
     if target_candidates:
+        # 후보들 중 기준(중앙)과의 거리가 가장 가까운 객체를 선택
         target_candidates.sort(key=lambda x: x[0])
         _, cx, cy, candidate_box = target_candidates[0]
 
-        # YOLO 검출된 중심 좌표로 칼만 필터 보정
-        measurement = np.array([[np.float32(cx)], [np.float32(cy)]])
-        corrected_state = kalman.correct(measurement)
-        kx, ky = corrected_state[:2].flatten()
-        print(
-            "[Kalman] 측정값:",
-            measurement.flatten(),
-            "보정된 상태:",
-            corrected_state.flatten(),
-        )
-
-        last_candidate_box = candidate_box  # 원본 바운딩박스 저장
-
-        dx = kx - BARREL_X
+        # 원본 검출된 중심 좌표를 기준으로 터렛 이동 계산
+        dx = cx - BARREL_X
         weight = compute_turret_weight(dx, TOLERANCE)
         if dx > TOLERANCE:
             action_command.append({"turret": "E", "weight": weight})
@@ -138,166 +107,27 @@ def detect():
             action_command.append({"turret": "Q", "weight": weight})
         else:
             action_command.append({"turret": " ", "weight": 0.0})
-        print(
-            f"[Detection+Kalman] cx: {cx:.2f}, 보정 후: ({kx:.2f}, {ky:.2f}), dx: {dx:.2f}, weight: {weight:.2f}"
-        )
+        print(f"[Detection] cx: {cx:.2f}, dx: {dx:.2f}, weight: {weight:.2f}")
 
-        # 원본(이동 전) 바운딩박스 : YOLO에서 검출한 바운딩박스 (초록색)
+        # 원본 바운딩 박스 (초록색) 표시
         x1, y1, x2, y2 = candidate_box[:4]
-        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        cv2.putText(
-            img,
-            "Original",
-            (int(x1), int(y1) - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 255, 0),
-            2,
-        )
-        cv2.circle(img, (int(cx), int(cy)), radius=5, color=(0, 255, 0), thickness=-1)
 
-        # 이동 후(보정 후) 바운딩박스: 원본 박스와 동일 크기로 중심만 수정 (빨간색)
-        width = x2 - x1
-        height = y2 - y1
-        corrected_box = [
-            kx - width / 2,
-            ky - height / 2,
-            kx + width / 2,
-            ky + height / 2,
-        ]
-        cv2.rectangle(
-            img,
-            (int(corrected_box[0]), int(corrected_box[1])),
-            (int(corrected_box[2]), int(corrected_box[3])),
-            (0, 0, 255),
-            2,
-        )
-        cv2.putText(
-            img,
-            "Corrected",
-            (int(corrected_box[0]), int(corrected_box[1]) - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 0, 255),
-            2,
-        )
-        # 터렛 이동 명령이 있을 경우 이동 거리도 표시
-        if weight > 0.0:
-            turret_text = f"Turret Move: {weight:.2f}"
-            cv2.putText(
-                img,
-                turret_text,
-                (10, 70),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
-                (0, 255, 255),
-                2,
-            )
     else:
-        # YOLO 검출이 없을 시 예측 상태 사용 및 이전 박스 크기 적용
-        kx, ky = predicted_state[:2].flatten()
-        dx = kx - BARREL_X
-        weight = compute_turret_weight(dx, TOLERANCE)
-        if dx > TOLERANCE:
-            action_command.append({"turret": "E", "weight": weight})
-        elif dx < -TOLERANCE:
-            action_command.append({"turret": "Q", "weight": weight})
-        else:
-            action_command.append({"turret": " ", "weight": 0.0})
-        print(
-            "[Kalman] 대상 미검출 - 예측 상태:",
-            predicted_state.flatten(),
-            f", weight: {weight:.2f}",
-        )
-
-        if last_candidate_box is not None:
-            x1, y1, x2, y2 = last_candidate_box[:4]
-            width = x2 - x1
-            height = y2 - y1
-        else:
-            width, height = 100, 100
-
-        corrected_box = [
-            kx - width / 2,
-            ky - height / 2,
-            kx + width / 2,
-            ky + height / 2,
-        ]
-        cv2.rectangle(
-            img,
-            (int(corrected_box[0]), int(corrected_box[1])),
-            (int(corrected_box[2]), int(corrected_box[3])),
-            (0, 0, 255),
-            2,
-        )
-        cv2.putText(
-            img,
-            "Predicted",
-            (int(corrected_box[0]), int(corrected_box[1]) - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 0, 255),
-            2,
-        )
-        cv2.circle(img, (int(kx), int(ky)), radius=5, color=(0, 0, 255), thickness=-1)
-        if weight > 0.0:
-            turret_text = f"Turret Move: {weight:.2f}"
-            cv2.putText(
-                img,
-                turret_text,
-                (10, 70),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.0,
-                (0, 255, 255),
-                2,
-            )
-
-    # Deep SORT 통합 (추적 정보 출력)
-    ds_detections = []
-    for det in detections:
-        bbox = [float(x) for x in det[:4]]
-        conf = float(det[4])
-        class_id = int(det[5])
-        ds_det = [bbox, conf, class_id]
-        ds_detections.append(ds_det)
-
-    tracks = tracker.update_tracks(ds_detections, frame=img)
-    for track in tracks:
-        if track.is_confirmed():
-            bbox = track.to_tlbr()  # [x1, y1, x2, y2]
-            print(f"Track {track.track_id}: {bbox}")
+        # 후보 객체가 없으면 터렛 명령 없이 "No Detection" 텍스트를 이미지에 표시
+        print("No target detected.")
+        action_command.append({"turret": " ", "weight": 0.0})
 
     print("Action Command Queue:", action_command)
 
-    for detection in result_json:
-        bbox = detection["bbox"]
-        class_name = detection["className"]
-        x1_det, y1_det, x2_det, y2_det = map(int, bbox)
-        cv2.rectangle(img, (x1_det, y1_det), (x2_det, y2_det), (255, 255, 0), 2)
-        cv2.putText(
-            img,
-            class_name,
-            (x1_det, y1_det - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 0),
-            2,
-        )
-
-    # 결과 이미지를 저장할 폴더 생성 (존재하지 않으면)
-    results_dir = "results"
-    os.makedirs(results_dir, exist_ok=True)
-    # 파일명은 타임스탬프 기반 (특수문자 제거)
-    filename = now.strftime("%Y%m%d_%H%M%S_%f")[:-3] + ".jpg"
-    annotated_image_path = os.path.join(results_dir, filename)
-    cv2.imwrite(annotated_image_path, img)
-    print(f"Annotated image saved as: {annotated_image_path}")
-
+    # 반환 시 JSON 형식으로 검출 결과를 전달합니다.
     return jsonify(result_json)
 
 
 @app.route("/info", methods=["POST"])
 def info():
+    """
+    /info 엔드포인트는 JSON 형식의 데이터를 수신하여, 처리 여부를 반환합니다.
+    """
     data = request.get_json(force=True)
     if not data:
         return jsonify({"error": "No JSON received"}), 400
@@ -307,6 +137,10 @@ def info():
 
 @app.route("/update_position", methods=["POST"])
 def update_position():
+    """
+    /update_position 엔드포인트는 "position" 키를 포함한 JSON 데이터를 수신하여,
+    현재 위치를 업데이트하고 그 결과를 반환합니다.
+    """
     data = request.get_json()
     if not data or "position" not in data:
         return jsonify({"status": "ERROR", "message": "Missing position data"}), 400
@@ -321,6 +155,9 @@ def update_position():
 
 @app.route("/get_move", methods=["GET"])
 def get_move():
+    """
+    /get_move 엔드포인트는 미리 정의된 이동 명령(move_command) 중 하나를 반환합니다.
+    """
     global move_command
     if move_command:
         command = move_command.pop(0)
@@ -332,6 +169,9 @@ def get_move():
 
 @app.route("/get_action", methods=["GET"])
 def get_action():
+    """
+    /get_action 엔드포인트는 터렛 등 액션 명령(action_command) 중 하나를 반환합니다.
+    """
     global action_command
     if action_command:
         command = action_command.pop(0)
@@ -343,6 +183,9 @@ def get_action():
 
 @app.route("/update_bullet", methods=["POST"])
 def update_bullet():
+    """
+    /update_bullet 엔드포인트는 총알 충돌 데이터를 수신하여 로그에 출력하고 응답을 반환합니다.
+    """
     data = request.get_json()
     if not data:
         return jsonify({"status": "ERROR", "message": "Invalid request data"}), 400
@@ -354,6 +197,9 @@ def update_bullet():
 
 @app.route("/set_destination", methods=["POST"])
 def set_destination():
+    """
+    /set_destination 엔드포인트는 목적지 데이터를 수신하여, 설정된 목적지를 반환합니다.
+    """
     data = request.get_json()
     if not data or "destination" not in data:
         return jsonify({"status": "ERROR", "message": "Missing destination data"}), 400
@@ -367,6 +213,9 @@ def set_destination():
 
 @app.route("/update_obstacle", methods=["POST"])
 def update_obstacle():
+    """
+    /update_obstacle 엔드포인트는 장애물 데이터를 수신하여 처리 결과를 반환합니다.
+    """
     data = request.get_json()
     if not data:
         return jsonify({"status": "error", "message": "No data received"}), 400
@@ -376,12 +225,15 @@ def update_obstacle():
 
 @app.route("/init", methods=["GET"])
 def init():
+    """
+    /init 엔드포인트는 시뮬레이션 시작 시 초기 설정 값을 반환합니다.
+    """
     config = {
-        "startMode": "start",  # Options: "start" or "pause"
-        "blStartX": 60,  # Blue Start Position
+        "startMode": "start",  # "start" 또는 "pause" 중 선택
+        "blStartX": 60,  # Blue 팀 시작 X 좌표
         "blStartY": 10,
         "blStartZ": 27.23,
-        "rdStartX": 59,  # Red Start Position
+        "rdStartX": 59,  # Red 팀 시작 X 좌표
         "rdStartY": 10,
         "rdStartZ": 280,
     }
@@ -391,9 +243,13 @@ def init():
 
 @app.route("/start", methods=["GET"])
 def start():
+    """
+    /start 엔드포인트는 시뮬레이션 시작 명령을 수신하면 제어 신호를 반환합니다.
+    """
     print("🚀 /start command received")
     return jsonify({"control": ""})
 
 
 if __name__ == "__main__":
+    # Flask 서버를 호스트 0.0.0.0의 포트 5000에서 실행합니다.
     app.run(host="0.0.0.0", port=5000)
