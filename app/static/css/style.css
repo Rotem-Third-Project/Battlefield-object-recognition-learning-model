@@ -3,42 +3,39 @@ body {
   background-color: #0f0f0f;
   color: #00ff00;
   font-family: "Share Tech Mono", monospace;
-  zoom: 85%; /* 화면 전체 축소 */
 }
 
-.video-wrapper img {
-  width: 80%; /* 영상 영역 축소 */
-  height: auto;
-  object-fit: cover;
+video {
+  width: 100%;
+  height: 70vh;
+  background-color: black;
   border-bottom: 3px solid #00ff00;
-  display: block;
-  margin: 0 auto;
 }
 
 .hud {
   display: flex;
   justify-content: space-around;
-  padding: 0.6rem;
+  padding: 1rem;
   background-color: rgba(0, 255, 0, 0.05);
   border-top: 1px solid #00ff00;
-  font-size: 1rem; /* 텍스트 크기 축소 */
+  font-size: 1.3rem;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 1rem;
 }
 
 .hud-item {
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 1rem;
   background-color: rgba(0, 255, 0, 0.07);
   border: 1px solid #00ff00;
-  border-radius: 6px;
-  min-width: 180px;
+  border-radius: 8px;
+  min-width: 220px;
   text-align: center;
   transition: all 0.3s ease-in-out;
 }
 
 .health-bar {
   width: 100%;
-  height: 12px;
+  height: 16px;
   background-color: #333;
   border: 1px solid #555;
   margin-top: 4px;
@@ -61,22 +58,22 @@ body {
 }
 
 .bar {
-  width: 5px;
+  width: 6px;
   background-color: #444;
   transition: height 0.3s, background-color 0.3s;
 }
 
 #bar1 {
-  height: 4px;
+  height: 5px;
 }
 #bar2 {
-  height: 8px;
+  height: 10px;
 }
 #bar3 {
-  height: 12px;
+  height: 15px;
 }
 #bar4 {
-  height: 16px;
+  height: 20px;
 }
 
 .hud-item.danger {
@@ -97,20 +94,20 @@ body {
 
 .control-panel {
   display: flex;
-  justify-content: center;
+  justify-content: space-around;
   background-color: rgba(0, 255, 0, 0.03);
-  padding: 0.7rem;
+  padding: 1rem;
   border-top: 1px solid #00ff00;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 1rem;
 }
 
 .control-panel button {
   background-color: #111;
   color: #00ff00;
   border: 1px solid #00ff00;
-  padding: 0.4rem 0.8rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
   cursor: pointer;
   border-radius: 6px;
   transition: background-color 0.3s ease;
@@ -125,22 +122,21 @@ body {
   background: black;
   border: 1px solid #00ff00;
   color: #00ff00;
-  padding: 0.25rem;
-  width: 130px;
-  font-size: 0.9rem;
+  padding: 0.3rem;
+  width: 150px;
 }
 
 .alert {
   position: fixed;
-  bottom: 15px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   background-color: rgba(0, 255, 0, 0.1);
   border: 1px solid #00ff00;
   color: #00ff00;
   font-family: "Share Tech Mono", monospace;
-  padding: 8px 16px;
-  font-size: 0.9rem;
+  padding: 10px 20px;
+  font-size: 1rem;
   border-radius: 6px;
   z-index: 1000;
   transition: opacity 0.4s ease;
@@ -162,4 +158,10 @@ body {
 .alert.danger {
   border-color: #ff3c3c;
   color: #ff3c3c;
+}
+.video-wrapper img {
+  width: 100%;
+  height: 70vh;
+  object-fit: cover;
+  border-bottom: 3px solid #00ff00;
 }
