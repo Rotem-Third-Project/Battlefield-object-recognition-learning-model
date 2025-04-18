@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Request, Form
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import torch
@@ -19,7 +19,7 @@ import numpy as np
 # 📌 경로 기본 설정
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
-CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"  # 조준선 이미지 경로
+CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -70,7 +70,7 @@ async def get_action():
         return action_command_queue.pop(0)
     return {"turret": "", "weight": 0.0}
 
-# ✅ YOLO 감지 + 사진 저장 + 조준선 오버레이
+# ✅ YOLO 감지 + 조준선 오버레이 + 저장
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
     with open(TMP_PATH, "wb") as f:
@@ -84,7 +84,7 @@ async def detect(image: UploadFile = File(...)):
 
     img_cv = cv2.imread(str(TMP_PATH))
     crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
-    crosshair = cv2.resize(crosshair, (60, 60), interpolation=cv2.INTER_AREA)
+    crosshair = cv2.resize(crosshair, (75, 75), interpolation=cv2.INTER_AREA)
 
     for box in detections:
         class_id = int(box[5])
@@ -93,7 +93,6 @@ async def detect(image: UploadFile = File(...)):
             confidence = float(box[4])
             class_name = target_classes[class_id]
 
-            # 중심 계산 및 조준선 오버레이
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
             h, w = crosshair.shape[:2]
@@ -120,7 +119,6 @@ async def detect(image: UploadFile = File(...)):
     cv2.imwrite(str(TMP_PATH), img_cv)
     return filtered_results
 
-# ✅ 롱폴링 API: 이미지 변경 검사
 @app.get("/check_new_frame")
 async def check_new_frame(last_mtime: float = 0):
     if not TMP_PATH.exists():
@@ -134,7 +132,7 @@ async def check_new_frame(last_mtime: float = 0):
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
     data = await request.json()
-    print(f"💥 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
+    print(f"\ud83d\udca5 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
     return {"status": "OK", "message": "Bullet impact data received"}
 
 @app.post("/set_destination")
@@ -151,7 +149,7 @@ async def set_destination(request: Request):
 @app.post("/update_obstacle")
 async def update_obstacle(request: Request):
     data = await request.json()
-    print("🪨 Obstacle Data:", data)
+    print("\ud83e\udea8 Obstacle Data:", data)
     return {"status": "success", "message": "Obstacle data received"}
 
 @app.get("/init")
