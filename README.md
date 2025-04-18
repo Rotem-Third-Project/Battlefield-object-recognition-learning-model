@@ -26,6 +26,7 @@ code . --reuse-window
 ├── package-lock.json   # 의존성 버전을 고정하는 자동 생성 파일
 ├── package.json   # Node.js 프로젝트 설정 및 의존성 정의 파일
 ├── requirements.txt   # Python 의존성 정의 파일
+├── test.py 
 └── 요구사항정의서.md 
 ```
 <!-- STRUCTURE-END -->
