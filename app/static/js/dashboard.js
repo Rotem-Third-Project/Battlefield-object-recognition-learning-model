@@ -108,10 +108,53 @@ async function sendDestination() {
   showAlert("📍 목적지 설정됨!", "success");
 }
 
-// ✅ 키 입력 이벤트 → FastAPI로 전송
-// 버튼과 중복 입력 방지를 위해 form은 기본 동작 유지
+// ✅ 위치 정보 FastAPI 전송
+function syncPositionToServer(x, y, z) {
+  fetch("/update_position", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ position: `${x},${y},${z}` }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.status === "OK") {
+        updatePosition(
+          `${data.current_position[0]}, ${data.current_position[1]}`
+        );
+        showAlert("📍 위치 업데이트됨!", "success");
+      }
+    });
+}
 
-// ✅ 기어 시각화
+// ✅ 키 입력 → 서버 전송 (200ms 쿨타임 적용)
+const keyCooldown = {};
+
+document.addEventListener("keydown", (event) => {
+  const key = event.key.toUpperCase();
+  const validKeys = ["W", "A", "S", "D", "P", "L"];
+  if (!validKeys.includes(key)) return;
+
+  const now = Date.now();
+  if (keyCooldown[key] && now - keyCooldown[key] < 200) return;
+  keyCooldown[key] = now;
+
+  const formData = new FormData();
+  formData.append("key", key);
+  fetch("/input_key", {
+    method: "POST",
+    body: formData,
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      updateGearUI(data.gear);
+      showAlert(`🔧 ${key} 입력됨 (기어 ${data.gear})`, "success");
+
+      // 🧭 예시 좌표 전송
+      syncPositionToServer(42, 10, 93);
+    });
+});
+
+// ✅ 기어 UI 갱신
 function updateGearUI(gearLevel) {
   const gear = document.getElementById("gear-level");
   if (gear) gear.textContent = gearLevel;

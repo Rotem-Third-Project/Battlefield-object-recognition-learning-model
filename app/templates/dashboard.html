@@ -53,16 +53,6 @@
       <input type="text" id="destInput" placeholder="x,y,z" />
       <button onclick="sendDestination()">📍 목적지 설정</button>
 
-      <!-- 🔘 전차 제어 버튼 -->
-      <form method="post" action="/input_key" style="margin-top: 1rem">
-        <button type="submit" name="key" value="W">⬆ 전진</button>
-        <button type="submit" name="key" value="S">⬇ 후진</button>
-        <button type="submit" name="key" value="A">⬅ 좌회전</button>
-        <button type="submit" name="key" value="D">➡ 우회전</button>
-        <button type="submit" name="key" value="P">🔼 기어 업</button>
-        <button type="submit" name="key" value="L">🔽 기어 다운</button>
-      </form>
-
       <!-- 🔫 포탑 회전 및 발사 -->
       <form method="post" action="/send_action" style="margin-top: 1rem">
         <input type="hidden" name="turret" value="ROTATE" />
@@ -72,35 +62,28 @@
       <button onclick="sendBullet()">💥 발사</button>
     </div>
 
-    <!-- ✅ 롱폴링을 통한 이미지 자동 갱신 -->
+    <!-- ✅ 키보드 입력 제어는 JS에서 처리 -->
     <script>
-      let lastMtime = 0;
+      document.addEventListener("keydown", (event) => {
+        const key = event.key.toUpperCase();
+        const validKeys = ["W", "A", "S", "D", "P", "L"];
+        if (!validKeys.includes(key)) return;
 
-      function refreshImage() {
-        const img = document.getElementById("live-image");
-        const timestamp = new Date().getTime();
-        img.src = `/tmp/temp_image.jpg?time=${timestamp}`;
-      }
-
-      function pollForNewImage() {
-        fetch(`/check_new_frame?last_mtime=${lastMtime}`)
+        const formData = new FormData();
+        formData.append("key", key);
+        fetch("/input_key", {
+          method: "POST",
+          body: formData,
+        })
           .then((res) => res.json())
           .then((data) => {
-            if (data.updated) {
-              refreshImage();
-              lastMtime = data.mtime;
-            }
-            pollForNewImage();
-          })
-          .catch(() => {
-            setTimeout(pollForNewImage, 2000);
+            updateGearUI(data.gear);
+            showAlert(`🔧 ${key} 입력됨 (기어 ${data.gear})`, "success");
           });
-      }
-
-      pollForNewImage();
+      });
     </script>
 
-    <!-- ✅ HUD 및 통신 로직 -->
+    <!-- ✅ 나머지 JS 로직 분리 -->
     <script src="/static/js/dashboard.js"></script>
   </body>
 </html>

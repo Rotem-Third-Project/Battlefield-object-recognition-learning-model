@@ -120,6 +120,30 @@ async def detect(image: UploadFile = File(...)):
     cv2.imwrite(str(TMP_PATH), img_cv)
     return filtered_results
 
+@app.post("/update_position")
+async def update_position(request: Request):
+    data = await request.json()
+    if "position" not in data:
+        return JSONResponse(status_code=400, content={
+            "status": "ERROR",
+            "message": "Missing position data"
+        })
+
+    try:
+        x, y, z = map(float, data["position"].split(","))
+        current_position = (int(x), int(z))  # 💡 Y는 고도라서 제외한 것으로 추정
+        print(f"📍 Position updated: {current_position}")
+        return {
+            "status": "OK",
+            "current_position": current_position
+        }
+    except Exception as e:
+        return JSONResponse(status_code=400, content={
+            "status": "ERROR",
+            "message": str(e)
+        })
+
+
 # ✅ 롱폴링 API: 이미지 변경 검사
 @app.get("/check_new_frame")
 async def check_new_frame(last_mtime: float = 0):
