@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>🪖 전차 전투 대시보드</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <style>
+      #live-image {
+        max-width: 100%;
+        border: 1px solid #444;
+        margin-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ✅ 탐지 이미지 (조준선 포함) -->
+    <div style="margin-top: 2rem">
+      <h3>📸 최신 탐지 이미지</h3>
+      <img id="live-image" src="/tmp/temp_image.jpg" alt="탐지 결과" />
+    </div>
+
+    <!-- ✅ HUD 패널 -->
+    <div class="hud">
+      <div class="hud-item" id="speed">속도: 0 km/h</div>
+      <div class="hud-item" id="health">
+        <div>전차 체력</div>
+        <div class="health-bar">
+          <div id="health-fill" class="health-fill"></div>
+        </div>
+        <div id="health-text">100%</div>
+      </div>
+      <div class="hud-item danger" id="threat">🚨 위협 감지: 없음</div>
+      <div class="hud-item" id="comm">
+        <div>📡 통신 신호</div>
+        <div class="signal-bar">
+          <div class="bar" id="bar1"></div>
+          <div class="bar" id="bar2"></div>
+          <div class="bar" id="bar3"></div>
+          <div class="bar" id="bar4"></div>
+        </div>
+      </div>
+      <div class="hud-item" id="position">좌표: 없음</div>
+      <div class="hud-item" id="gear">
+        🔧 기어: <span id="gear-level">2</span>
+      </div>
+    </div>
+
+    <!-- ✅ 알림창 -->
+    <div id="alert-box" class="alert hidden">알림창</div>
+
+    <!-- ✅ 목적지 입력 및 제어 -->
+    <div class="command-panel">
+      <input type="text" id="destInput" placeholder="x,y,z" />
+      <button onclick="sendDestination()">📍 목적지 설정</button>
+
+      <!-- 🔘 전차 제어 버튼 -->
+      <form method="post" action="/input_key" style="margin-top: 1rem">
+        <button type="submit" name="key" value="W">⬆ 전진</button>
+        <button type="submit" name="key" value="S">⬇ 후진</button>
+        <button type="submit" name="key" value="A">⬅ 좌회전</button>
+        <button type="submit" name="key" value="D">➡ 우회전</button>
+        <button type="submit" name="key" value="P">🔼 기어 업</button>
+        <button type="submit" name="key" value="L">🔽 기어 다운</button>
+      </form>
+
+      <!-- 🔫 포탑 회전 및 발사 -->
+      <form method="post" action="/send_action" style="margin-top: 1rem">
+        <input type="hidden" name="turret" value="ROTATE" />
+        <input type="hidden" name="weight" value="1.0" />
+        <button type="submit">🌀 포탑 회전</button>
+      </form>
+      <button onclick="sendBullet()">💥 발사</button>
+    </div>
+
+    <!-- ✅ 롱폴링을 통한 이미지 자동 갱신 -->
+    <script>
+      let lastMtime = 0;
+
+      function refreshImage() {
+        const img = document.getElementById("live-image");
+        const timestamp = new Date().getTime();
+        img.src = `/tmp/temp_image.jpg?time=${timestamp}`;
+      }
+
+      function pollForNewImage() {
+        fetch(`/check_new_frame?last_mtime=${lastMtime}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.updated) {
+              refreshImage();
+              lastMtime = data.mtime;
+            }
+            pollForNewImage();
+          })
+          .catch(() => {
+            setTimeout(pollForNewImage, 2000);
+          });
+      }
+
+      pollForNewImage();
+    </script>
+
+    <!-- ✅ HUD 및 통신 로직 -->
+    <script src="/static/js/dashboard.js"></script>
+  </body>
+</html>

@@ -1,13 +1,16 @@
 {
-    ".devcontainer": "Dev Container 개발 환경 설정 파일",
-    ".github": "GitHub Actions 워크플로 및 자동화 스크립트",
-    "app": "메인 애플리케이션 코드",
-    "data": "이미지 등 샘플 데이터 저장",
-    "node_modules": "설치된 외부 패키지 (자동 생성됨, 이슈 관리용 포함)",
-    "test": "테스트 코드 모음",
-    ".gitignore": "Git이 추적하지 않아야 할 파일 및 디렉토리를 정의",
-    "package.json": "Node.js 프로젝트 설정 및 의존성 정의 파일",
-    "package-lock.json": "의존성 버전을 고정하는 자동 생성 파일",
-    "README.md": "프로젝트 소개 및 사용법 문서",
-    "requirements.txt": "Python 의존성 정의 파일"
-  }  
+  ".devcontainer": "Dev Container 개발 환경 설정 파일",
+  ".github": "GitHub Actions 워크플로 및 자동화 스크립트",
+  "app": "메인 애플리케이션 코드",
+  "data": "이미지 등 샘플 데이터 저장",
+  "node_modules": "설치된 외부 패키지 (자동 생성됨, 이슈 관리용 포함)",
+  "test": "테스트 코드 모음",
+  ".gitignore": "Git이 추적하지 않아야 할 파일 및 디렉토리를 정의",
+  "package.json": "Node.js 프로젝트 설정 및 의존성 정의 파일",
+  "package-lock.json": "의존성 버전을 고정하는 자동 생성 파일",
+  "README.md": "프로젝트 소개 및 사용법 문서",
+  "requirements.txt": "Python 의존성 정의 파일",
+  "models": "Yolov8 모델 저장",
+  "static": "정적 파일 저장(대시보드 스타일)",
+  "templates": "HTML 템플릿 저장(대시보드 스타일)"
+}
