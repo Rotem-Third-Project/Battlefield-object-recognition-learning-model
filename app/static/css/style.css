@@ -3,39 +3,42 @@ body {
   background-color: #0f0f0f;
   color: #00ff00;
   font-family: "Share Tech Mono", monospace;
+  zoom: 85%; /* 화면 전체 축소 */
 }
 
-video {
-  width: 100%;
-  height: 70vh;
-  background-color: black;
+.video-wrapper img {
+  width: 80%; /* 영상 영역 축소 */
+  height: auto;
+  object-fit: cover;
   border-bottom: 3px solid #00ff00;
+  display: block;
+  margin: 0 auto;
 }
 
 .hud {
   display: flex;
   justify-content: space-around;
-  padding: 1rem;
+  padding: 0.6rem;
   background-color: rgba(0, 255, 0, 0.05);
   border-top: 1px solid #00ff00;
-  font-size: 1.3rem;
+  font-size: 1rem; /* 텍스트 크기 축소 */
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.7rem;
 }
 
 .hud-item {
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   background-color: rgba(0, 255, 0, 0.07);
   border: 1px solid #00ff00;
-  border-radius: 8px;
-  min-width: 220px;
+  border-radius: 6px;
+  min-width: 180px;
   text-align: center;
   transition: all 0.3s ease-in-out;
 }
 
 .health-bar {
   width: 100%;
-  height: 16px;
+  height: 12px;
   background-color: #333;
   border: 1px solid #555;
   margin-top: 4px;
@@ -58,22 +61,22 @@ video {
 }
 
 .bar {
-  width: 6px;
+  width: 5px;
   background-color: #444;
   transition: height 0.3s, background-color 0.3s;
 }
 
 #bar1 {
-  height: 5px;
+  height: 4px;
 }
 #bar2 {
-  height: 10px;
+  height: 8px;
 }
 #bar3 {
-  height: 15px;
+  height: 12px;
 }
 #bar4 {
-  height: 20px;
+  height: 16px;
 }
 
 .hud-item.danger {
@@ -94,20 +97,20 @@ video {
 
 .control-panel {
   display: flex;
-  justify-content: space-around;
+  justify-content: center;
   background-color: rgba(0, 255, 0, 0.03);
-  padding: 1rem;
+  padding: 0.7rem;
   border-top: 1px solid #00ff00;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.7rem;
 }
 
 .control-panel button {
   background-color: #111;
   color: #00ff00;
   border: 1px solid #00ff00;
-  padding: 0.5rem 1rem;
-  font-size: 1rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
   cursor: pointer;
   border-radius: 6px;
   transition: background-color 0.3s ease;
@@ -122,21 +125,22 @@ video {
   background: black;
   border: 1px solid #00ff00;
   color: #00ff00;
-  padding: 0.3rem;
-  width: 150px;
+  padding: 0.25rem;
+  width: 130px;
+  font-size: 0.9rem;
 }
 
 .alert {
   position: fixed;
-  bottom: 20px;
+  bottom: 15px;
   left: 50%;
   transform: translateX(-50%);
   background-color: rgba(0, 255, 0, 0.1);
   border: 1px solid #00ff00;
   color: #00ff00;
   font-family: "Share Tech Mono", monospace;
-  padding: 10px 20px;
-  font-size: 1rem;
+  padding: 8px 16px;
+  font-size: 0.9rem;
   border-radius: 6px;
   z-index: 1000;
   transition: opacity 0.4s ease;
@@ -158,10 +162,4 @@ video {
 .alert.danger {
   border-color: #ff3c3c;
   color: #ff3c3c;
-}
-.video-wrapper img {
-  width: 100%;
-  height: 70vh;
-  object-fit: cover;
-  border-bottom: 3px solid #00ff00;
 }

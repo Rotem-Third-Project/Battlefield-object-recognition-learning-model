@@ -84,7 +84,7 @@ async def detect(image: UploadFile = File(...)):
 
     img_cv = cv2.imread(str(TMP_PATH))
     crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
-    crosshair = cv2.resize(crosshair, (60, 60), interpolation=cv2.INTER_AREA)
+    crosshair = cv2.resize(crosshair, (75, 75), interpolation=cv2.INTER_AREA)
 
     for box in detections:
         class_id = int(box[5])
