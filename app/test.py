@@ -11,10 +11,11 @@ app = Flask(__name__)
 model = YOLO("best_56000.pt")
 
 # 전역 변수: 기준(바렐) 중앙 좌표와 터렛 이동 허용 오차 설정
-BARREL_X = 960  # 기준 좌표 (예: 화면 중앙 x좌표)
+BARREL_X = 960  # 포신 중앙 x좌표
+BARREL_Y = 883  # 포신 중앙 y좌표
 TOLERANCE = 15  # 터렛 이동 허용 오차 (픽셀 단위)
 action_command = []  # 터렛 등 액션 명령 저장 (예: {'turret': 'E', 'weight': 1.0})
-SPEED = 0.5
+SPEED = 0.5  # 이동 가중치
 move_command = [{"move": "W", "weight": SPEED}] * 60
 
 # (이전 코드에 칼만 필터가 있었으나, 현재는 사용하지 않으므로 제거)
@@ -23,24 +24,50 @@ move_command = [{"move": "W", "weight": SPEED}] * 60
 last_candidate_box = None
 
 
-def compute_turret_weight(dx, tolerance):
+def compute_turret_weight_X(delta, tolerance):
     """
-    터렛 이동 거리를 결정하기 위해, 기준 좌표(BARREL_X)와의 수평 차이(dx)에 따라
-    가중치(이동량)를 비선형 방식으로 계산합니다.
-
-    - abs(dx) <= tolerance 인 경우, 이동할 필요가 없으므로 0.0을 반환합니다.
-    - abs(dx) > tolerance 인 경우, 초과한 거리(extra)를 (abs(dx) - tolerance)로 계산합니다.
-      이 값을 100픽셀 단위로 정규화한 후, 3.5 제곱(power 3.5)을 취하고 0.1을 곱하여 weight를 산출합니다.
-      예를 들어, extra가 100픽셀이면 weight = 0.1 * (1)**3.5 = 0.1,
-             extra가 200픽셀이면 weight = 0.1 * (2)**3.5 (즉, 비선형적으로 증가함).
-    - 최종 weight가 10.0을 초과할 경우, 최대값 10.0으로 제한하여 반환합니다.
+    delta와 tolerance를 기반으로 터렛 회전 가중치(weight)를 계산합니다.
+    extra가 속한 구간에 따라 weight를 고정된 값으로 반환합니다.
     """
-    abs_dx = abs(dx)
-    if abs_dx <= tolerance:
+    abs_delta = abs(delta)
+    if abs_delta <= tolerance:
         return 0.0
-    extra = abs_dx - tolerance
-    extra_weight = 0.1 * (extra / 100) ** 3.5
-    return min(extra_weight, 100.0)
+
+    extra = abs_delta - tolerance
+
+    if extra <= 200:
+        return 0.1
+    elif extra <= 300:
+        return 0.4
+    elif extra <= 500:
+        return 0.5
+    elif extra <= 900:
+        return 1.0
+    else:
+        return 1.0
+
+
+def compute_turret_weight_Y(delta, tolerance):
+    """
+    delta와 tolerance를 기반으로 터렛 회전 가중치(weight)를 계산합니다.
+    extra가 속한 구간에 따라 weight를 고정된 값으로 반환합니다.
+    """
+    abs_delta = abs(delta)
+    if abs_delta <= tolerance:
+        return 0.0
+
+    extra = abs_delta - tolerance
+
+    if extra <= 200:
+        return 0.1
+    elif extra <= 300:
+        return 0.2
+    elif extra <= 500:
+        return 0.5
+    elif extra <= 900:
+        return 1.0
+    else:
+        return 1.0
 
 
 @app.route("/detect", methods=["POST"])
@@ -48,15 +75,14 @@ def detect():
     global action_command, last_candidate_box
     action_command.clear()
 
-    # 이미지를 수신하여 임시 파일로 저장 (YOLO 추론용)
+    # 이미지 수신 및 저장
     image = request.files["image"]
     image_path = "temp_image.jpg"
     image.save(image_path)
 
-    # YOLO 모델로 객체 검출 (deep_sort 추적도 포함)
+    # YOLO 객체 추적
     results = model.track(image_path, persist=True, show=False)
-    boxes = results[0].boxes
-    detections = boxes.data.cpu().numpy()
+    detections = results[0].boxes.data.cpu().numpy()
 
     target_classes = {0: "Enemy", 1: "car", 7: "truck", 15: "rock"}
     result_json = []
@@ -65,61 +91,64 @@ def detect():
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
 
-    # 검출된 객체들 중 'Enemy' 클래스만 후보로 선정
+    # 'Enemy' 클래스만 후보로 수집
     for box in detections:
         class_id = int(box[5])
         if class_id in target_classes:
-            raw_confidence = float(box[4])
-            normalized_confidence = sigmoid(raw_confidence)
-            detection_result = {
-                "className": target_classes[class_id],
-                "bbox": [float(coord) for coord in box[:4]],
-                "confidence": normalized_confidence,
-            }
-            result_json.append(detection_result)
-            if class_id == 0:
-                print(
-                    "Enemy confidence:",
-                    detection_result["confidence"],
-                    target_classes[class_id],
-                )
-        if class_id == 0:  # 'Enemy' 클래스만 터렛 이동 기준으로 사용
+            conf = sigmoid(float(box[4]))
+            result_json.append(
+                {
+                    "className": target_classes[class_id],
+                    "bbox": [float(c) for c in box[:4]],
+                    "confidence": conf,
+                }
+            )
+        if class_id == 0:
             x1, y1, x2, y2 = box[:4]
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
             dist = abs(cx - BARREL_X)
             target_candidates.append((dist, cx, cy, box))
 
-    # 이미지 로드
-    img = cv2.imread(image_path)
-
+    # 최적 타겟 선택
     if target_candidates:
-        # 후보들 중 기준(중앙)과의 거리가 가장 가까운 객체를 선택
         target_candidates.sort(key=lambda x: x[0])
         _, cx, cy, candidate_box = target_candidates[0]
 
-        # 원본 검출된 중심 좌표를 기준으로 터렛 이동 계산
         dx = cx - BARREL_X
-        weight = compute_turret_weight(dx, TOLERANCE)
-        if dx > TOLERANCE:
-            action_command.append({"turret": "E", "weight": weight})
-        elif dx < -TOLERANCE:
-            action_command.append({"turret": "Q", "weight": weight})
-        else:
-            action_command.append({"turret": " ", "weight": 0.0})
-        print(f"[Detection] cx: {cx:.2f}, dx: {dx:.2f}, weight: {weight:.2f}")
+        dy = cy - BARREL_Y
 
-        # 원본 바운딩 박스 (초록색) 표시
-        x1, y1, x2, y2 = candidate_box[:4]
+        # x, y 축별로 weight 계산
+        weight_x = compute_turret_weight_X(dx, TOLERANCE)
+        weight_y = compute_turret_weight_Y(dy, TOLERANCE)
+
+        # 수평 회전 (Q/E)
+        if dx > TOLERANCE:
+            action_command.append({"turret": "E", "weight": weight_x})
+        elif dx < -TOLERANCE:
+            action_command.append({"turret": "Q", "weight": weight_x})
+
+        # 수직 회전 (R/F)
+        if dy > TOLERANCE:
+            action_command.append({"turret": "F", "weight": weight_y})
+            print("actionnnnnnnnnn", action_command)
+        elif dy < -TOLERANCE:
+            action_command.append({"turret": "R", "weight": weight_y})
+            print("actionnnnnnnnnn", action_command)
+        # 둘 다 오차 범위 내에 있으면 정지
+        if abs(dx) <= TOLERANCE and abs(dy) <= TOLERANCE:
+            action_command.append({"turret": " ", "weight": 0.0})
+
+        print(
+            f"[Detection] cx: {cx:.2f}, cy: {cy:.2f}, dx: {dx:.2f}, dy: {dy:.2f}, "
+            f"wx: {weight_x:.2f}, wy: {weight_y:.2f}"
+        )
 
     else:
-        # 후보 객체가 없으면 터렛 명령 없이 "No Detection" 텍스트를 이미지에 표시
+        # 검출 대상 없을 때
         print("No target detected.")
         action_command.append({"turret": " ", "weight": 0.0})
 
     print("Action Command Queue:", action_command)
-
-    # 반환 시 JSON 형식으로 검출 결과를 전달합니다.
     return jsonify(result_json)
 
 
