@@ -8,7 +8,7 @@ from ultralytics import YOLO
 app = Flask(__name__)
 
 # YOLO 모델 로드 (미리 로드하여 추론 속도 향상)
-model = YOLO("best_56000.pt")
+model = YOLO("yolov12_weight.pt")
 
 # 전역 변수: 기준(바렐) 중앙 좌표와 터렛 이동 허용 오차 설정
 BARREL_X = 960  # 기준 좌표 (예: 화면 중앙 x좌표)
@@ -54,7 +54,7 @@ def detect():
     image.save(image_path)
 
     # YOLO 모델로 객체 검출 (deep_sort 추적도 포함)
-    results = model.track(image_path, persist=True, show=False)
+    results = model.track(image_path, persist=True, show=False, conf = 0.5)
     boxes = results[0].boxes
     detections = boxes.data.cpu().numpy()
 

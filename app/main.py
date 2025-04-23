@@ -14,7 +14,7 @@ def home():
     return "hello world"
 
 
-model = YOLO("yolov8n.pt")  # 미리 모델을 로드해두는 게 성능면에서 좋음
+model = YOLO("yolov12_weight.pt")  # 미리 모델을 로드해두는 게 성능면에서 좋음
 
 BARREL_X = 960
 TOLERANCE = 200
