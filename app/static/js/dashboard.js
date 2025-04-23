@@ -1,10 +1,19 @@
-// ✅ 실시간 감지 이미지 롱폴링
+// ✅ 실시간 감지 이미지 롱폴링 + 실패 시 신호 약화 반영
 let lastMtime = 0;
 
 function refreshImage() {
   const img = document.getElementById("live-image");
   const timestamp = new Date().getTime();
   img.src = `/tmp/temp_image.jpg?time=${timestamp}`;
+  img.onerror = () => {
+    console.warn("❌ 이미지 로딩 실패");
+    lastSignalTime = lastSignalTime - 2000;
+    updateSignalStrength();
+  };
+  img.onload = () => {
+    lastSignalTime = Date.now();
+    updateSignalStrength();
+  };
 }
 
 function pollForNewImage() {
@@ -53,27 +62,27 @@ function updatePosition(pos) {
 function updateGearUI(gearLevel) {
   const elem = document.getElementById("gear-level");
   if (elem) elem.textContent = gearLevel;
-}
 
-function showAlert(message, type = "success") {
-  const alert = document.getElementById("alert-box");
-  if (!alert) return;
-  alert.textContent = message;
-  alert.className = `alert ${type}`;
-  alert.classList.remove("hidden");
-  setTimeout(() => alert.classList.add("hidden"), 3000);
+  const stick = document.getElementById("joystick");
+  if (stick) {
+    stick.classList.remove("animate");
+    void stick.offsetWidth;
+    stick.classList.add("animate");
+  }
 }
 
 async function sendMove() {
-  const res = await fetch("/get_move");
-  const data = await res.json();
-  showAlert(`📦 이동 명령: ${data.move}`, "success");
+  await fetch("/get_move");
 }
 
-async function sendAction() {
-  const res = await fetch("/get_action");
-  const data = await res.json();
-  showAlert(`🎯 포탑 명령: ${data.turret}`, "success");
+async function sendAction(turret = "FIRE") {
+  const formData = new FormData();
+  formData.append("turret", turret);
+  formData.append("weight", "1.0");
+  await fetch("/send_action", {
+    method: "POST",
+    body: formData,
+  });
 }
 
 async function sendBullet() {
@@ -83,7 +92,6 @@ async function sendBullet() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  showAlert("💥 탄환 발사됨!", "danger");
 }
 
 async function sendDestination() {
@@ -93,7 +101,6 @@ async function sendDestination() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ destination: dest }),
   });
-  showAlert("📍 목적지 설정됨!", "success");
 }
 
 function syncPositionToServer(x, y, z) {
@@ -116,9 +123,18 @@ const keyCooldown = {};
 
 document.addEventListener("keydown", (event) => {
   const key = event.key.toUpperCase();
+  const now = Date.now();
+
+  if (event.code === "Space" || key === " ") {
+    event.preventDefault();
+    if (keyCooldown["FIRE"] && now - keyCooldown["FIRE"] < 200) return;
+    keyCooldown["FIRE"] = now;
+    sendAction("FIRE");
+    return;
+  }
+
   if (!["W", "A", "S", "D", "P", "L"].includes(key)) return;
 
-  const now = Date.now();
   if (keyCooldown[key] && now - keyCooldown[key] < 200) return;
   keyCooldown[key] = now;
 

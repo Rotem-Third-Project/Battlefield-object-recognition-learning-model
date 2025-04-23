@@ -1,14 +1,11 @@
-from fastapi import FastAPI, File, UploadFile, Request, Form
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, File, UploadFile, Request, Form, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-import torch
 from ultralytics import YOLO
 import shutil
-import json
 import threading
 import webbrowser
-import requests
 import os
 import time
 import asyncio
@@ -33,6 +30,13 @@ action_command_queue = []
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (0, 0)
+
+# ✅ 서버 시작 시 명령 큐 초기화
+@app.on_event("startup")
+async def clear_command_queues():
+    move_command_queue.clear()
+    action_command_queue.clear()
+    print("🧹 명령 큐 초기화 완료")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -68,8 +72,12 @@ async def get_move():
 @app.get("/get_action")
 async def get_action():
     if action_command_queue:
-        return action_command_queue.pop(0)
-    return {"turret": "", "weight": 0.0}
+        print(len(action_command_queue))
+        action = action_command_queue.pop(0)
+        print(f"🎯 {action['turret']} 명령 1회 사용 후 제거됨")
+        return action
+    
+    return {"turret": " ", "weight": 0.0}
 
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
@@ -119,12 +127,25 @@ async def detect(image: UploadFile = File(...)):
                 'confidence': confidence
             })
 
-    # ✅ 이미지 출력용만 리사이즈 (예: 60%)
-    resize_ratio = 0.6
-    resized_img = cv2.resize(img_cv, (0, 0), fx=resize_ratio, fy=resize_ratio)
+    resized_img = cv2.resize(img_cv, (0, 0), fx=0.6, fy=0.6)
     cv2.imwrite(str(TMP_PATH), resized_img)
 
     return JSONResponse(content=filtered_results)
+
+@app.get("/tmp/temp_image.jpg")
+async def get_temp_image():
+    max_wait = 0.3
+    interval = 0.02
+    waited = 0
+
+    while not TMP_PATH.exists() and waited < max_wait:
+        await asyncio.sleep(interval)
+        waited += interval
+
+    if not TMP_PATH.exists():
+        raise HTTPException(status_code=404, detail="Image not ready")
+
+    return FileResponse(str(TMP_PATH))
 
 @app.post("/update_position")
 async def update_position(request: Request):
@@ -132,7 +153,6 @@ async def update_position(request: Request):
     data = await request.json()
     if "position" not in data:
         return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing position data"})
-
     try:
         x, y, z = map(float, data["position"].split(","))
         current_position = (int(x), int(z))
@@ -205,6 +225,5 @@ def open_browser():
 if __name__ == "__main__":
     if os.environ.get("RUN_MAIN") != "true":
         threading.Thread(target=open_browser).start()
-
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=False)
