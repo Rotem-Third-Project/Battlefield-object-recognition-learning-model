@@ -32,6 +32,7 @@ move_command_queue = []
 action_command_queue = []
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
+current_position = (0, 0)
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -70,14 +71,16 @@ async def get_action():
         return action_command_queue.pop(0)
     return {"turret": "", "weight": 0.0}
 
-# ✅ YOLO 감지 + 사진 저장 + 조준선 오버레이
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
     with open(TMP_PATH, "wb") as f:
         shutil.copyfileobj(image.file, f)
 
-    results = model(str(TMP_PATH))
-    detections = results[0].boxes.data.cpu().numpy()
+    try:
+        results = list(model(str(TMP_PATH), verbose=False, stream=True))
+        detections = results[0].boxes.data.cpu().numpy()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
 
     target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
     filtered_results = []
@@ -93,7 +96,6 @@ async def detect(image: UploadFile = File(...)):
             confidence = float(box[4])
             class_name = target_classes[class_id]
 
-            # 중심 계산 및 조준선 오버레이
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
             h, w = crosshair.shape[:2]
@@ -118,10 +120,11 @@ async def detect(image: UploadFile = File(...)):
             })
 
     cv2.imwrite(str(TMP_PATH), img_cv)
-    return filtered_results
+    return JSONResponse(content=filtered_results)
 
 @app.post("/update_position")
 async def update_position(request: Request):
+    global current_position
     data = await request.json()
     if "position" not in data:
         return JSONResponse(status_code=400, content={
@@ -131,8 +134,7 @@ async def update_position(request: Request):
 
     try:
         x, y, z = map(float, data["position"].split(","))
-        current_position = (int(x), int(z))  # 💡 Y는 고도라서 제외한 것으로 추정
-        print(f"📍 Position updated: {current_position}")
+        current_position = (int(x), int(z))
         return {
             "status": "OK",
             "current_position": current_position
@@ -143,8 +145,6 @@ async def update_position(request: Request):
             "message": str(e)
         })
 
-
-# ✅ 롱폴링 API: 이미지 변경 검사
 @app.get("/check_new_frame")
 async def check_new_frame(last_mtime: float = 0):
     if not TMP_PATH.exists():
@@ -200,6 +200,9 @@ def open_browser():
     webbrowser.open("http://localhost:5000/dashboard")
 
 if __name__ == "__main__":
-    threading.Thread(target=open_browser).start()
+    # ✅ 중복 실행 방지 (uvicorn --reload 사용 시 subprocess에서는 실행 안 함)
+    if os.environ.get("RUN_MAIN") != "true":
+        threading.Thread(target=open_browser).start()
+
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=False)
