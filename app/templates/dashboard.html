@@ -2,24 +2,55 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>🪖 전차 전투 대시보드</title>
     <link rel="stylesheet" href="/static/css/style.css" />
     <style>
-      #live-image {
-        max-width: 100%;
-        border: 1px solid #444;
-        margin-top: 1rem;
+      /* 기존 스타일은 유지하며 통신 신호 상태별 스타일 추가 */
+      .bar.signal-good {
+        background-color: #00ff00;
+        opacity: 1;
+        animation: none;
+      }
+      .bar.signal-weak {
+        background-color: #ffd700;
+        opacity: 0.7;
+        animation: pulse-weak 1s infinite alternate;
+      }
+      .bar.signal-lost {
+        background-color: #ff3c3c;
+        opacity: 0.5;
+        animation: pulse-lost 1s infinite alternate;
+      }
+
+      @keyframes pulse-weak {
+        from {
+          opacity: 0.4;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes pulse-lost {
+        0% {
+          opacity: 0.2;
+        }
+        50% {
+          opacity: 0.8;
+        }
+        100% {
+          opacity: 0.2;
+        }
       }
     </style>
   </head>
   <body>
-    <!-- ✅ 탐지 이미지 (조준선 포함) -->
-    <div style="margin-top: 2rem">
+    <div>
       <h3>📸 최신 탐지 이미지</h3>
       <img id="live-image" src="/tmp/temp_image.jpg" alt="탐지 결과" />
     </div>
 
-    <!-- ✅ HUD 패널 -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
       <div class="hud-item" id="health">
@@ -33,10 +64,10 @@
       <div class="hud-item" id="comm">
         <div>📡 통신 신호</div>
         <div class="signal-bar">
-          <div class="bar" id="bar1"></div>
-          <div class="bar" id="bar2"></div>
-          <div class="bar" id="bar3"></div>
-          <div class="bar" id="bar4"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
         </div>
       </div>
       <div class="hud-item" id="position">좌표: 없음</div>
@@ -45,45 +76,61 @@
       </div>
     </div>
 
-    <!-- ✅ 알림창 -->
     <div id="alert-box" class="alert hidden">알림창</div>
 
-    <!-- ✅ 목적지 입력 및 제어 -->
     <div class="command-panel">
       <input type="text" id="destInput" placeholder="x,y,z" />
       <button onclick="sendDestination()">📍 목적지 설정</button>
 
-      <!-- 🔫 포탑 회전 및 발사 -->
       <form method="post" action="/send_action" style="margin-top: 1rem">
         <input type="hidden" name="turret" value="ROTATE" />
         <input type="hidden" name="weight" value="1.0" />
         <button type="submit">🌀 포탑 회전</button>
       </form>
+
       <button onclick="sendBullet()">💥 발사</button>
     </div>
 
-    <!-- ✅ 키보드 입력 제어는 JS에서 처리 -->
-    <script>
-      document.addEventListener("keydown", (event) => {
-        const key = event.key.toUpperCase();
-        const validKeys = ["W", "A", "S", "D", "P", "L"];
-        if (!validKeys.includes(key)) return;
-
-        const formData = new FormData();
-        formData.append("key", key);
-        fetch("/input_key", {
-          method: "POST",
-          body: formData,
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            updateGearUI(data.gear);
-            showAlert(`🔧 ${key} 입력됨 (기어 ${data.gear})`, "success");
-          });
-      });
-    </script>
-
-    <!-- ✅ 나머지 JS 로직 분리 -->
     <script src="/static/js/dashboard.js"></script>
+    <script>
+      // ✅ 신호 상태에 따라 스타일 변경
+      let lastSignalTime = Date.now();
+
+      function updateSignalStrength() {
+        const bars = document.querySelectorAll(".signal-bar .bar");
+        const now = Date.now();
+        const delay = now - lastSignalTime;
+
+        let signalClass = "signal-good";
+        if (delay > 3000 && delay <= 6000) {
+          signalClass = "signal-weak";
+        } else if (delay > 6000) {
+          signalClass = "signal-lost";
+        }
+
+        bars.forEach((bar) => {
+          bar.classList.remove("signal-good", "signal-weak", "signal-lost");
+          bar.classList.add(signalClass);
+        });
+      }
+
+      // fetch 요청 성공 시 신호 시간 갱신
+      const originalFetch = window.fetch;
+      window.fetch = function (...args) {
+        return originalFetch(...args)
+          .then((response) => {
+            lastSignalTime = Date.now();
+            updateSignalStrength();
+            return response;
+          })
+          .catch((err) => {
+            updateSignalStrength();
+            throw err;
+          });
+      };
+
+      // 1초마다 상태 체크 (연결 끊김 감지용)
+      setInterval(updateSignalStrength, 1000);
+    </script>
   </body>
 </html>

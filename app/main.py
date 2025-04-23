@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Request, Form
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import torch
@@ -19,7 +19,7 @@ import numpy as np
 # 📌 경로 기본 설정
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
-CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"  # 조준선 이미지 경로
+CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -119,7 +119,11 @@ async def detect(image: UploadFile = File(...)):
                 'confidence': confidence
             })
 
-    cv2.imwrite(str(TMP_PATH), img_cv)
+    # ✅ 이미지 출력용만 리사이즈 (예: 60%)
+    resize_ratio = 0.6
+    resized_img = cv2.resize(img_cv, (0, 0), fx=resize_ratio, fy=resize_ratio)
+    cv2.imwrite(str(TMP_PATH), resized_img)
+
     return JSONResponse(content=filtered_results)
 
 @app.post("/update_position")
@@ -127,33 +131,33 @@ async def update_position(request: Request):
     global current_position
     data = await request.json()
     if "position" not in data:
-        return JSONResponse(status_code=400, content={
-            "status": "ERROR",
-            "message": "Missing position data"
-        })
+        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing position data"})
 
     try:
         x, y, z = map(float, data["position"].split(","))
         current_position = (int(x), int(z))
-        return {
-            "status": "OK",
-            "current_position": current_position
-        }
+        return {"status": "OK", "current_position": current_position}
     except Exception as e:
-        return JSONResponse(status_code=400, content={
-            "status": "ERROR",
-            "message": str(e)
-        })
+        return JSONResponse(status_code=400, content={"status": "ERROR", "message": str(e)})
 
 @app.get("/check_new_frame")
 async def check_new_frame(last_mtime: float = 0):
-    if not TMP_PATH.exists():
-        return {"updated": False, "mtime": 0}
-    mtime = os.path.getmtime(TMP_PATH)
-    if mtime > last_mtime:
-        return {"updated": True, "mtime": mtime}
-    await asyncio.sleep(1.0)
-    return {"updated": False, "mtime": mtime}
+    MAX_WAIT_TIME = 5.0
+    CHECK_INTERVAL = 0.3
+    start_time = time.time()
+
+    while True:
+        if not TMP_PATH.exists():
+            return {"updated": False, "mtime": 0}
+
+        mtime = os.path.getmtime(TMP_PATH)
+        if mtime > last_mtime:
+            return {"updated": True, "mtime": mtime}
+
+        if time.time() - start_time > MAX_WAIT_TIME:
+            return {"updated": False, "mtime": mtime}
+
+        await asyncio.sleep(CHECK_INTERVAL)
 
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
@@ -180,7 +184,7 @@ async def update_obstacle(request: Request):
 
 @app.get("/init")
 async def init():
-    config = {
+    return {
         "startMode": "start",
         "blStartX": 60,
         "blStartY": 10,
@@ -189,7 +193,6 @@ async def init():
         "rdStartY": 10,
         "rdStartZ": 280
     }
-    return config
 
 @app.get("/start")
 async def start():
@@ -200,7 +203,6 @@ def open_browser():
     webbrowser.open("http://localhost:5000/dashboard")
 
 if __name__ == "__main__":
-    # ✅ 중복 실행 방지 (uvicorn --reload 사용 시 subprocess에서는 실행 안 함)
     if os.environ.get("RUN_MAIN") != "true":
         threading.Thread(target=open_browser).start()
 
