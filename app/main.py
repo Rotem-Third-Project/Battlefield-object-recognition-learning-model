@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Request, Form, HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from ultralytics import YOLO
@@ -16,6 +16,7 @@ import numpy as np
 # 📌 경로 기본 설정
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
+TMP_WORK_PATH = BASE_DIR / "tmp" / "temp_image_working.jpg"  # ✨ 안전 저장용
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 
 app = FastAPI()
@@ -31,13 +32,11 @@ gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (0, 0)
 
-# ✅ 서버 시작 시 명령 큐 초기화
 @app.on_event("startup")
 async def clear_command_queues():
     move_command_queue.clear()
     action_command_queue.clear()
 
-# ✅ 대시보드 페이지
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
@@ -72,20 +71,18 @@ async def get_move():
 @app.get("/get_action")
 async def get_action():
     if action_command_queue:
-        print(len(action_command_queue))
         action = action_command_queue.pop(0)
         print(f"🎯 {action['turret']} 명령 1회 사용 후 제거됨")
         return action
-    
     return {"turret": " ", "weight": 0.0}
 
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
-    with open(TMP_PATH, "wb") as f:
+    with open(TMP_WORK_PATH, "wb") as f:
         shutil.copyfileobj(image.file, f)
 
     try:
-        results = list(model(str(TMP_PATH), verbose=False, stream=True))
+        results = list(model(str(TMP_WORK_PATH), verbose=False, stream=True))
         detections = results[0].boxes.data.cpu().numpy()
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
@@ -93,7 +90,7 @@ async def detect(image: UploadFile = File(...)):
     target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
     filtered_results = []
 
-    img_cv = cv2.imread(str(TMP_PATH))
+    img_cv = cv2.imread(str(TMP_WORK_PATH))
     crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
     crosshair = cv2.resize(crosshair, (60, 60), interpolation=cv2.INTER_AREA)
 
@@ -128,24 +125,28 @@ async def detect(image: UploadFile = File(...)):
             })
 
     resized_img = cv2.resize(img_cv, (0, 0), fx=0.6, fy=0.6)
-    cv2.imwrite(str(TMP_PATH), resized_img)
+    cv2.imwrite(str(TMP_WORK_PATH), resized_img)
+    TMP_WORK_PATH.replace(TMP_PATH)  # ✨ 완성된 프레임만 교체
 
     return JSONResponse(content=filtered_results)
 
-@app.get("/tmp/temp_image.jpg")
-async def get_temp_image():
-    max_wait = 0.3
-    interval = 0.02
-    waited = 0
-
-    while not TMP_PATH.exists() and waited < max_wait:
-        await asyncio.sleep(interval)
-        waited += interval
-
-    if not TMP_PATH.exists():
-        raise HTTPException(status_code=404, detail="Image not ready")
-
-    return FileResponse(str(TMP_PATH))
+# ✨ 안정적인 MJPEG 스트리밍
+@app.get("/video_feed")
+def video_feed():
+    def generate():
+        while True:
+            if TMP_PATH.exists():
+                frame = cv2.imread(str(TMP_PATH))
+                if frame is None:
+                    time.sleep(0.005)
+                    continue  # YOLO가 저장 중일 수 있음
+                _, buffer = cv2.imencode(".jpg", frame)
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
+                )
+            time.sleep(0.016)
+    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.post("/update_position")
 async def update_position(request: Request):
@@ -159,25 +160,6 @@ async def update_position(request: Request):
         return {"status": "OK", "current_position": current_position}
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "ERROR", "message": str(e)})
-
-@app.get("/check_new_frame")
-async def check_new_frame(last_mtime: float = 0):
-    MAX_WAIT_TIME = 5.0
-    CHECK_INTERVAL = 0.3
-    start_time = time.time()
-
-    while True:
-        if not TMP_PATH.exists():
-            return {"updated": False, "mtime": 0}
-
-        mtime = os.path.getmtime(TMP_PATH)
-        if mtime > last_mtime:
-            return {"updated": True, "mtime": mtime}
-
-        if time.time() - start_time > MAX_WAIT_TIME:
-            return {"updated": False, "mtime": mtime}
-
-        await asyncio.sleep(CHECK_INTERVAL)
 
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
