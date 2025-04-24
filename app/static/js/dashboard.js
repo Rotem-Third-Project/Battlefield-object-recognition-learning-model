@@ -161,14 +161,21 @@ function updateSignalStrength() {
   const delay = now - lastSignalTime;
 
   let activeCount = 4;
-  if (delay < 500) activeCount = 4;
-  else if (delay < 1000) activeCount = 3;
-  else if (delay < 2000) activeCount = 2;
-  else activeCount = 1;
+  if (delay > 4000) activeCount = 0;
+  else if (delay > 3000) activeCount = 1;
+  else if (delay > 2000) activeCount = 2;
+  else if (delay > 1000) activeCount = 3;
 
+  // 바 색상 적용
   bars.forEach((bar, index) => {
-    bar.style.backgroundColor = index < activeCount ? "#00ff00" : "#444";
+    bar.style.backgroundColor = index < activeCount ? "#00ff00" : "#222";
   });
+
+  // 박스 스타일 변경
+  const signalBox = document.getElementById("comm");
+  if (signalBox) {
+    signalBox.classList.toggle("signal-danger", activeCount === 0);
+  }
 }
 
 const originalFetch = window.fetch;

@@ -36,8 +36,8 @@ current_position = (0, 0)
 async def clear_command_queues():
     move_command_queue.clear()
     action_command_queue.clear()
-    print("🧹 명령 큐 초기화 완료")
 
+# ✅ 대시보드 페이지
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
