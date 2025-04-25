@@ -22,19 +22,14 @@ async def detect_target(
         img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         print("🧠 YOLO 추적 시작")
 
-<<<<<<< HEAD
         results = model.track(img_cv, persist=True, show=False)
-        print("✅ YOLO 추적 완료")
-=======
-            results = model.track(img_cv, persist=True, show=False)
-            result = results[0]
-            boxes = result.boxes
-            track_ids = result.boxes.id
-            detections = boxes.data.cpu().numpy()
-            track_ids = track_ids.cpu().numpy() if track_ids is not None else [-1] * len(detections)
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
->>>>>>> bf2edecbafc73bc89011de04c909978d8a46400f
+        result = results[0]
+        boxes = result.boxes
+        track_ids = result.boxes.id
+        detections = boxes.data.cpu().numpy()
+        track_ids = track_ids.cpu().numpy() if track_ids is not None else [-1] * len(detections)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
 
         result = results[0]
         boxes = result.boxes
