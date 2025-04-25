@@ -188,6 +188,35 @@ h3 {
   }
 }
 
+/* === 조준선 HUD === */
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120px;
+  height: 120px;
+  transform: translate(-50%, -50%);
+  border: 2px dashed black;
+  border-radius: 50%;
+  z-index: 10;
+  pointer-events: none;
+  transition: border-color 0.2s ease;
+}
+
+#hud-distance {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  font-family: monospace;
+  color: black;
+  z-index: 11;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px #000;
+  transition: color 0.2s ease;
+}
+
 /* === 반응형 === */
 @media (max-width: 600px) {
   h3 {
