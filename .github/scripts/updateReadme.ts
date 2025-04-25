@@ -41,14 +41,19 @@ try {
 // ✅ 디렉토리 항목 읽기
 const items = fs.readdirSync(".", { withFileTypes: true });
 
-// ✅ 폴더/파일 나누기
-const folderItems = items.filter(
-  (item) =>
-    item.isDirectory() &&
-    !item.name.startsWith(".") &&
-    item.name !== "node_modules"
-);
-const fileItems = items.filter((item) => item.isFile());
+// ✅ 폴더/파일 나누기 + 정렬
+const folderItems = items
+  .filter(
+    (item) =>
+      item.isDirectory() &&
+      !item.name.startsWith(".") &&
+      item.name !== "node_modules"
+  )
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+const fileItems = items
+  .filter((item) => item.isFile())
+  .sort((a, b) => a.name.localeCompare(b.name));
 
 // ✅ 리스트 출력 포맷 함수
 function formatItems(items: fs.Dirent[], isDirectory: boolean): string[] {
@@ -57,7 +62,7 @@ function formatItems(items: fs.Dirent[], isDirectory: boolean): string[] {
     const symbol = isLast ? "└──" : "├──";
     const name = item.name + (isDirectory ? "/" : "");
     const comment = comments[item.name] ? `  # ${comments[item.name]}` : "";
-    return `${symbol} ${name} ${comment}`;
+    return `${symbol} ${name}${comment}`;
   });
 }
 
