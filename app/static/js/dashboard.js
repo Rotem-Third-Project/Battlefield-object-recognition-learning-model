@@ -42,8 +42,12 @@ function updateStatus() {
     .then((res) => res.json())
     .then((data) => {
       updateGearUI(data.gear_level);
-      updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
-      updateThreat(data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음");
+      updatePosition(
+        `${data.current_position[0]}, ${data.current_position[1]}`
+      );
+      updateThreat(
+        data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음"
+      );
     });
 }
 setInterval(updateStatus, 1000);
@@ -78,7 +82,8 @@ function updateHealth(hp) {
   const healthItem = document.getElementById("health");
 
   fill.style.width = `${hp}%`;
-  fill.style.backgroundColor = hp >= 70 ? "#00ff00" : hp >= 40 ? "#ffd700" : "#ff3c3c";
+  fill.style.backgroundColor =
+    hp >= 70 ? "#00ff00" : hp >= 40 ? "#ffd700" : "#ff3c3c";
   text.textContent = `${hp}%`;
   healthItem.classList.toggle("danger", hp < 40);
 }
@@ -157,6 +162,7 @@ window.addEventListener("blur", () => {
 });
 
 // ✅ SPACE → FIRE
+
 document.addEventListener("keydown", (event) => {
   if (event.code === "Space" || event.key === " ") {
     event.preventDefault();
@@ -166,6 +172,7 @@ document.addEventListener("keydown", (event) => {
     }
   }
 });
+
 document.addEventListener("keyup", (event) => {
   if (event.code === "Space" || event.key === " ") {
     activeKeys["FIRE"] = false;
@@ -210,7 +217,9 @@ function syncPositionToServer(x, y, z) {
     .then((res) => res.json())
     .then((data) => {
       if (data.status === "OK") {
-        updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
+        updatePosition(
+          `${data.current_position[0]}, ${data.current_position[1]}`
+        );
       }
     });
 }
@@ -229,3 +238,30 @@ window.fetch = function (...args) {
       throw err;
     });
 };
+
+// ✅ 조준선 HUD 갱신
+async function updateHUD() {
+  try {
+    const res = await fetch("/get_hud");
+    const data = await res.json();
+
+    const crosshair = document.getElementById("crosshair");
+    const hudText = document.getElementById("hud-distance");
+    const distance = Math.round(data.distance);
+    hudText.textContent = `${distance}m`;
+
+    if (data.is_aimed) {
+      crosshair.style.borderColor = "limegreen";
+      hudText.style.color = "limegreen";
+    } else if (data.is_detected) {
+      crosshair.style.borderColor = "red";
+      hudText.style.color = "red";
+    } else {
+      crosshair.style.borderColor = "black";
+      hudText.style.color = "black";
+    }
+  } catch (err) {
+    console.warn("HUD 상태 갱신 실패", err);
+  }
+}
+setInterval(updateHUD, 500);

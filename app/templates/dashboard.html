@@ -5,49 +5,7 @@
     <title>🪖 전차 전투 대시보드</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/static/css/style.css" />
-    <style>
-      /* 🔄 로딩 화면 */
-      .loading-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: black;
-        color: #00ff00;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        font-family: "Share Tech Mono", monospace;
-        z-index: 9999;
-        transition: opacity 0.4s ease;
-      }
-
-      .loader {
-        border: 5px solid #333;
-        border-top: 5px solid #00ff00;
-        border-radius: 50%;
-        width: 50px;
-        height: 50px;
-        animation: spin 1s linear infinite;
-        margin-bottom: 1rem;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      #live-image {
-        display: none;
-        border: 2px solid #00ff00;
-        max-width: 100%;
-        margin: 1rem auto;
-        box-shadow: 0 0 10px #00ff00;
-      }
-    </style>
+    <script defer src="/static/js/dashboard.js"></script>
   </head>
 
   <body>
@@ -57,17 +15,25 @@
       <div id="loading-status">📡 대시보드 준비 중...</div>
     </div>
 
-    <!-- 🖼️ 실시간 MJPEG 영상 -->
-    <div>
+    <!-- 🖼️ 실시간 MJPEG 영상 + 조준선 -->
+    <div class="video-container">
       <h3 style="text-align: center; color: #00ff00">탐지 영상</h3>
       <img id="live-image" src="/video_feed" alt="탐지 결과" />
       <div
         id="fps"
-        style="text-align: center; color: #00ff00; font-size: 0.9rem; margin-top: 0.5rem"
+        style="
+          text-align: center;
+          color: #00ff00;
+          font-size: 0.9rem;
+          margin-top: 0.5rem;
+        "
       ></div>
+
+      <div id="crosshair"></div>
+      <div id="hud-distance">-- m</div>
     </div>
 
-    <!-- 📊 HUD -->
+    <!-- 📊 HUD 정보 -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
       <div class="hud-item" id="health">
@@ -109,8 +75,5 @@
 
       <button onclick="sendBullet()">💥 발사</button>
     </div>
-
-    <!-- 🧠 대시보드 JS -->
-    <script src="/static/js/dashboard.js"></script>
   </body>
 </html>
