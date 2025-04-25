@@ -12,7 +12,6 @@ code . --reuse-window
 <!-- STRUCTURE-START -->
 ```
 📁 루트 폴더
-├── .devcontainer/   # Dev Container 개발 환경 설정 파일
 ├── app/   # 메인 애플리케이션 코드
 ├── data/   # 이미지 등 샘플 데이터 저장
 └── test/   # 테스트 코드 모음
