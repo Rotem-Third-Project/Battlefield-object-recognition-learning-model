@@ -1,11 +1,10 @@
-# 🚀 FastAPI + YOLO + BoT-SORT 통합 서버
-
 from fastapi import FastAPI, File, UploadFile, Form, Request
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
-import shutil
+
 import threading
 import webbrowser
 import os
@@ -13,17 +12,12 @@ import time
 import cv2
 import numpy as np
 from pathlib import Path
-from fastapi.middleware.cors import CORSMiddleware
 
-
-
-
-# 기본 설정
+# === 경로 설정 ===
 BASE_DIR = Path(__file__).resolve().parent
-TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
-TMP_WORK_PATH = BASE_DIR / "tmp" / "temp_image_working.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 
+# === 앱 초기화 ===
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
@@ -37,18 +31,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 모델 로드
+# === 전역 상태 ===
 model = YOLO(BASE_DIR / "models" / "best.pt")
-
-# 전역 변수
-BARREL_X = 960
-BARREL_Y = 883
+BARREL_X, BARREL_Y = 960, 883
 TOLERANCE = 15
-move_command_queue = []
-action_command_queue = []
+
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
+move_command_queue = []
+action_command_queue = []
 current_position = (0, 0)
+
+latest_frame = None
+frame_lock = threading.Lock()
+tracking_active = False
+last_get_move_time = time.time()
 
 @app.on_event("startup")
 async def startup_event():
@@ -72,20 +69,31 @@ async def input_key(key: str = Form(...)):
 
 @app.get("/get_move")
 async def get_move():
+    global tracking_active, last_get_move_time
+
+    now = time.time()
+    time_diff = now - last_get_move_time
+    last_get_move_time = now
+
+    if not tracking_active:
+        print("🟢 트래킹 시작됨 → 명령 큐 초기화")
+        move_command_queue.clear()
+        action_command_queue.clear()
+        tracking_active = True
+
+    if time_diff > 3:
+        print("🔴 트래킹 중단 감지")
+        tracking_active = False
+
     if move_command_queue:
         return move_command_queue.pop(0)
-    return {"move": "STOP", "weight": 1.0}
+    return {"move": "DECELERATE", "weight": 0.2}
 
 @app.get("/get_action")
 async def get_action():
     if action_command_queue:
         return action_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
-
-@app.post("/send_move")
-async def send_move(move: str = Form(...), weight: float = Form(...)):
-    move_command_queue.append({"move": move, "weight": weight})
-    return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/send_action")
 async def send_action(turret: str = Form(...), weight: float = Form(...)):
@@ -94,11 +102,14 @@ async def send_action(turret: str = Form(...), weight: float = Form(...)):
 
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
-    with open(TMP_WORK_PATH, "wb") as f:
-        shutil.copyfileobj(image.file, f)
+    global latest_frame
 
     try:
-        results = model.track(str(TMP_WORK_PATH), persist=True, show=False, tracker='custom_botsort.yaml')
+        image_bytes = await image.read()
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        results = model.track(img_cv, persist=True, show=False, tracker='custom_botsort.yaml')
         result = results[0]
         boxes = result.boxes
         track_ids = result.boxes.id
@@ -111,11 +122,9 @@ async def detect(image: UploadFile = File(...)):
     result_json = []
     action_command_queue.clear()
     target_candidates = []
-    
-    img_cv = cv2.imread(str(TMP_WORK_PATH))
+
     crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
     crosshair = cv2.resize(crosshair, (60, 60), interpolation=cv2.INTER_AREA)
-    
 
     for i, box in enumerate(detections):
         class_id = int(box[5])
@@ -133,8 +142,7 @@ async def detect(image: UploadFile = File(...)):
     if target_candidates:
         target_candidates.sort(key=lambda x: x[0])
         _, cx, cy, _ = target_candidates[0]
-        dx = cx - BARREL_X
-        dy = cy - BARREL_Y
+        dx, dy = cx - BARREL_X, cy - BARREL_Y
 
         def turret_weight(delta, axis):
             abs_d = abs(delta)
@@ -157,10 +165,10 @@ async def detect(image: UploadFile = File(...)):
             action_command_queue.append({"turret": "R", "weight": weight_y})
         if abs(dx) <= TOLERANCE and abs(dy) <= TOLERANCE:
             action_command_queue.append({"turret": " ", "weight": 0.0})
-        
+
     resized_img = cv2.resize(img_cv, (0, 0), fx=0.6, fy=0.6)
-    cv2.imwrite(str(TMP_WORK_PATH), resized_img)
-    TMP_WORK_PATH.replace(TMP_PATH)  # ✨ 완성된 프레임만 교체
+    with frame_lock:
+        latest_frame = resized_img.copy()
 
     return JSONResponse(content=result_json)
 
@@ -168,22 +176,26 @@ async def detect(image: UploadFile = File(...)):
 def video_feed():
     def generate():
         while True:
-            if TMP_WORK_PATH.exists():
-                frame = cv2.imread(str(TMP_WORK_PATH))
-                if frame is None:
-                    time.sleep(0.005)
-                    continue
+            with frame_lock:
+                frame = latest_frame.copy() if latest_frame is not None else None
+            if frame is not None:
                 _, buffer = cv2.imencode(".jpg", frame)
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
             time.sleep(0.016)
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
+@app.get("/status")
+async def status():
+    return {
+        "gear_level": gear_level,
+        "current_position": current_position,
+        "action_queue_len": len(action_command_queue)
+    }
+
 @app.post("/update_position")
 async def update_position(request: Request):
     global current_position
     data = await request.json()
-    if "position" not in data:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing position data"})
     try:
         x, y, z = map(float, data["position"].split(","))
         current_position = (int(x), int(z))
@@ -194,25 +206,17 @@ async def update_position(request: Request):
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
     data = await request.json()
-    print(f"\U0001F4A5 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
+    print(f"Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
     return {"status": "OK", "message": "Bullet impact data received"}
 
 @app.post("/set_destination")
 async def set_destination(request: Request):
     data = await request.json()
-    if "destination" not in data:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing destination data"})
     try:
         x, y, z = map(float, data["destination"].split(","))
         return {"status": "OK", "destination": {"x": x, "y": y, "z": z}}
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "ERROR", "message": f"Invalid format: {str(e)}"})
-
-@app.post("/update_obstacle")
-async def update_obstacle(request: Request):
-    data = await request.json()
-    print("\U0001FAA8 Obstacle Data:", data)
-    return {"status": "success", "message": "Obstacle data received"}
 
 @app.get("/init")
 async def init():
@@ -222,11 +226,6 @@ async def init():
         "rdStartX": 59, "rdStartY": 10, "rdStartZ": 280
     }
 
-@app.get("/start")
-async def start():
-    return {"control": ""}
-
-# 브라우저 자동 실행
 if __name__ == "__main__":
     if os.environ.get("RUN_MAIN") != "true":
         threading.Thread(target=lambda: webbrowser.open("http://localhost:5000/dashboard")).start()

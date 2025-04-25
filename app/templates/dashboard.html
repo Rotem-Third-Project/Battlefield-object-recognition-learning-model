@@ -2,60 +2,77 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>🪖 전차 전투 대시보드</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/static/css/style.css" />
     <style>
-      .bar.signal-good {
-        background-color: #00ff00;
-        opacity: 1;
-        animation: none;
-      }
-      .bar.signal-weak {
-        background-color: #ffd700;
-        opacity: 0.7;
-        animation: pulse-weak 1s infinite alternate;
-      }
-      .bar.signal-lost {
-        background-color: #ff3c3c;
-        opacity: 0.5;
-        animation: pulse-lost 1s infinite alternate;
+      /* 🔄 로딩 화면 */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: black;
+        color: #00ff00;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        font-family: "Share Tech Mono", monospace;
+        z-index: 9999;
+        transition: opacity 0.4s ease;
       }
 
-      @keyframes pulse-weak {
-        from {
-          opacity: 0.4;
-        }
+      .loader {
+        border: 5px solid #333;
+        border-top: 5px solid #00ff00;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 1rem;
+      }
+
+      @keyframes spin {
         to {
-          opacity: 1;
+          transform: rotate(360deg);
         }
       }
 
-      @keyframes pulse-lost {
-        0% {
-          opacity: 0.2;
-        }
-        50% {
-          opacity: 0.8;
-        }
-        100% {
-          opacity: 0.2;
-        }
+      #live-image {
+        display: none;
+        border: 2px solid #00ff00;
+        max-width: 100%;
+        margin: 1rem auto;
+        box-shadow: 0 0 10px #00ff00;
       }
     </style>
   </head>
+
   <body>
-    <div>
-      <h3>탐지 이미지</h3>
-      <!-- ✅ MJPEG 스트리밍으로 교체 -->
-      <img
-        id="live-image"
-        src="/video_feed"
-        alt="탐지 결과"
-        style="border: 2px solid #555; width: 800px"
-      />
+    <!-- 🔄 로딩 스크린 -->
+    <div id="loading-screen" class="loading-overlay">
+      <div class="loader"></div>
+      <div id="loading-status">📡 대시보드 준비 중...</div>
     </div>
 
+    <!-- 🖼️ 실시간 MJPEG 영상 -->
+    <div>
+      <h3>탐지 영상</h3>
+      <img id="live-image" src="/video_feed" alt="탐지 결과" />
+      <div
+        id="fps"
+        style="
+          text-align: center;
+          color: #00ff00;
+          font-size: 0.9rem;
+          margin-top: 0.5rem;
+        "
+      ></div>
+    </div>
+
+    <!-- 📊 HUD -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
       <div class="hud-item" id="health">
@@ -81,58 +98,39 @@
       </div>
     </div>
 
+    <!-- ⚠️ 알림 -->
     <div id="alert-box" class="alert hidden">알림창</div>
 
+    <!-- 🎮 명령 패널 -->
     <div class="command-panel">
       <input type="text" id="destInput" placeholder="x,y,z" />
       <button onclick="sendDestination()">📍 목적지 설정</button>
-
       <form method="post" action="/send_action" style="margin-top: 1rem">
         <input type="hidden" name="turret" value="ROTATE" />
         <input type="hidden" name="weight" value="1.0" />
         <button type="submit">🌀 포탑 회전</button>
       </form>
-
       <button onclick="sendBullet()">💥 발사</button>
     </div>
 
+    <!-- 🧠 대시보드 JS -->
     <script src="/static/js/dashboard.js"></script>
     <script>
-      let lastSignalTime = Date.now();
+      // ✅ 로딩 스크린 제어
+      window.addEventListener("DOMContentLoaded", () => {
+        const img = document.getElementById("live-image");
+        const loading = document.getElementById("loading-screen");
 
-      function updateSignalStrength() {
-        const bars = document.querySelectorAll(".signal-bar .bar");
-        const now = Date.now();
-        const delay = now - lastSignalTime;
-
-        let signalClass = "signal-good";
-        if (delay > 3000 && delay <= 6000) {
-          signalClass = "signal-weak";
-        } else if (delay > 6000) {
-          signalClass = "signal-lost";
+        if (img && loading) {
+          img.onload = () => {
+            loading.style.opacity = 0;
+            setTimeout(() => {
+              loading.style.display = "none";
+              img.style.display = "block";
+            }, 300);
+          };
         }
-
-        bars.forEach((bar) => {
-          bar.classList.remove("signal-good", "signal-weak", "signal-lost");
-          bar.classList.add(signalClass);
-        });
-      }
-
-      const originalFetch = window.fetch;
-      window.fetch = function (...args) {
-        return originalFetch(...args)
-          .then((response) => {
-            lastSignalTime = Date.now();
-            updateSignalStrength();
-            return response;
-          })
-          .catch((err) => {
-            updateSignalStrength();
-            throw err;
-          });
-      };
-
-      setInterval(updateSignalStrength, 1000);
+      });
     </script>
   </body>
 </html>

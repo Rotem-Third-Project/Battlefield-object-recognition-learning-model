@@ -1,36 +1,48 @@
-// ✅ 실시간 감지 이미지 롱폴링 + 실패 시 신호 약화 반영
-let lastMtime = 0;
+// ✅ 상태 변수
+let lastSignalTime = Date.now();
+let lastFrameTime = performance.now();
 
-function refreshImage() {
+// ✅ MJPEG onload → FPS 측정 + 로딩 스크린 종료
+window.addEventListener("DOMContentLoaded", () => {
   const img = document.getElementById("live-image");
-  const timestamp = new Date().getTime();
-  img.src = `/tmp/temp_image.jpg?time=${timestamp}`;
-  img.onerror = () => {
-    console.warn("❌ 이미지 로딩 실패");
-    lastSignalTime = lastSignalTime - 2000;
-    updateSignalStrength();
-  };
-  img.onload = () => {
-    lastSignalTime = Date.now();
-    updateSignalStrength();
-  };
-}
+  const loading = document.getElementById("loading-screen");
+  const fpsElem = document.getElementById("fps");
 
-function pollForNewImage() {
-  fetch(`/check_new_frame?last_mtime=${lastMtime}`)
+  if (img && loading) {
+    img.onload = () => {
+      // FPS 계산
+      const now = performance.now();
+      const fps = (1000 / (now - lastFrameTime)).toFixed(1);
+      lastFrameTime = now;
+      if (fpsElem) fpsElem.textContent = `FPS: ${fps}`;
+
+      // 로딩 스크린 제거 + 이미지 표시
+      loading.style.opacity = 0;
+      setTimeout(() => {
+        loading.style.display = "none";
+        img.style.display = "block";
+      }, 300);
+    };
+  }
+});
+
+// ✅ 상태 동기화 (기어, 좌표, 위협)
+function updateStatus() {
+  fetch("/status")
     .then((res) => res.json())
     .then((data) => {
-      if (data.updated) {
-        refreshImage();
-        lastMtime = data.mtime;
-      }
-    })
-    .catch((err) => console.warn("❌ 이미지 체크 실패:", err))
-    .finally(() => setTimeout(pollForNewImage, 100));
+      updateGearUI(data.gear_level);
+      updatePosition(
+        `${data.current_position[0]}, ${data.current_position[1]}`
+      );
+      updateThreat(
+        data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음"
+      );
+    });
 }
+setInterval(updateStatus, 1000);
 
-pollForNewImage();
-
+// ✅ 체력 표시
 function updateHealth(hp) {
   const healthText = document.getElementById("health-text");
   const fill = document.getElementById("health-fill");
@@ -44,21 +56,25 @@ function updateHealth(hp) {
   healthItem.classList.toggle("danger", hp < 40);
 }
 
+// ✅ 위협 표시
 function updateThreat(threat) {
   const elem = document.getElementById("threat");
   if (elem) elem.textContent = `🚨 위협 감지: ${threat}`;
 }
 
+// ✅ 속도 표시
 function updateSpeed(speed) {
   const elem = document.getElementById("speed");
   if (elem) elem.textContent = `속도: ${speed} km/h`;
 }
 
+// ✅ 위치 표시
 function updatePosition(pos) {
   const elem = document.getElementById("position");
   if (elem) elem.textContent = `좌표: ${pos}`;
 }
 
+// ✅ 기어 표시 및 UI 반응
 function updateGearUI(gearLevel) {
   const elem = document.getElementById("gear-level");
   if (elem) elem.textContent = gearLevel;
@@ -71,6 +87,7 @@ function updateGearUI(gearLevel) {
   }
 }
 
+// ✅ 서버 명령 전송
 async function sendMove() {
   await fetch("/get_move");
 }
@@ -103,6 +120,7 @@ async function sendDestination() {
   });
 }
 
+// ✅ 위치 서버로 전송
 function syncPositionToServer(x, y, z) {
   fetch("/update_position", {
     method: "POST",
@@ -119,6 +137,7 @@ function syncPositionToServer(x, y, z) {
     });
 }
 
+// ✅ 키 입력 처리
 const keyCooldown = {};
 
 document.addEventListener("keydown", (event) => {
@@ -134,7 +153,6 @@ document.addEventListener("keydown", (event) => {
   }
 
   if (!["W", "A", "S", "D", "P", "L"].includes(key)) return;
-
   if (keyCooldown[key] && now - keyCooldown[key] < 200) return;
   keyCooldown[key] = now;
 
@@ -152,9 +170,7 @@ document.addEventListener("keydown", (event) => {
     });
 });
 
-// ✅ 통신 신호 상태 시각화 (1~4단계 민감도 반영)
-let lastSignalTime = Date.now();
-
+// ✅ 신호 세기 시각화
 function updateSignalStrength() {
   const bars = document.querySelectorAll(".signal-bar .bar");
   const now = Date.now();
@@ -166,30 +182,28 @@ function updateSignalStrength() {
   else if (delay > 2000) activeCount = 2;
   else if (delay > 1000) activeCount = 3;
 
-  // 바 색상 적용
   bars.forEach((bar, index) => {
     bar.style.backgroundColor = index < activeCount ? "#00ff00" : "#222";
   });
 
-  // 박스 스타일 변경
   const signalBox = document.getElementById("comm");
   if (signalBox) {
     signalBox.classList.toggle("signal-danger", activeCount === 0);
   }
 }
+setInterval(updateSignalStrength, 1000);
 
+// ✅ fetch 통신에 신호 반영
 const originalFetch = window.fetch;
 window.fetch = function (...args) {
   return originalFetch(...args)
-    .then((response) => {
+    .then((res) => {
       lastSignalTime = Date.now();
       updateSignalStrength();
-      return response;
+      return res;
     })
     .catch((err) => {
       updateSignalStrength();
       throw err;
     });
 };
-
-setInterval(updateSignalStrength, 1000);

@@ -1,3 +1,4 @@
+/* === 기본 스타일 === */
 body {
   margin: 0;
   font-family: "Share Tech Mono", monospace;
@@ -13,18 +14,26 @@ h3 {
   font-size: 1.5rem;
 }
 
+/* === 실시간 영상 === */
 #live-image {
-  display: block;
+  display: none;
   max-width: 100%;
   height: auto;
   border: 2px solid #00ff00;
   margin: 1rem auto;
   box-shadow: 0 0 10px #00ff00;
-  image-rendering: auto;
-  content-visibility: auto;
-  loading: lazy;
 }
 
+/* === FPS 표시 === */
+#fps {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #00ff00;
+  margin-top: 0.5rem;
+  font-weight: bold;
+}
+
+/* === HUD 구성 === */
 .hud {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -53,9 +62,10 @@ h3 {
 
 .hud-item.signal-danger {
   border-color: #ff3c3c !important;
-  box-shadow: 0 0 10px #ff3c3c;
+  box-shadow: 0 0 12px #ff3c3c;
 }
 
+/* === 체력 게이지 === */
 .health-bar {
   width: 100%;
   background-color: #222;
@@ -70,6 +80,7 @@ h3 {
   width: 100%;
 }
 
+/* === 통신 신호 === */
 .signal-bar {
   display: flex;
   justify-content: center;
@@ -99,6 +110,7 @@ h3 {
   height: 30px;
 }
 
+/* === 명령 패널 === */
 .command-panel {
   text-align: center;
   padding: 1rem;
@@ -117,6 +129,7 @@ h3 {
   font-size: 1rem;
 }
 
+/* === 알림창 === */
 .alert {
   position: fixed;
   top: 1rem;
@@ -140,6 +153,42 @@ h3 {
   display: none;
 }
 
+/* === 로딩 화면 === */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000;
+  color: #00ff00;
+  font-family: "Share Tech Mono", monospace;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  z-index: 9999;
+  transition: opacity 0.4s ease;
+}
+
+/* === 로딩 애니메이션 === */
+.loader {
+  border: 5px solid #333;
+  border-top: 5px solid #00ff00;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* === 반응형 === */
 @media (max-width: 600px) {
   h3 {
     font-size: 1.2rem;
@@ -147,11 +196,6 @@ h3 {
 
   .hud {
     grid-template-columns: 1fr;
-  }
-
-  .alert {
-    top: 1rem;
-    bottom: auto;
   }
 
   body {
