@@ -14,6 +14,10 @@ import cv2
 import numpy as np
 from pathlib import Path
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+import torch
+torch.set_num_threads(1)
+
 # === 경로 설정 ===
 BASE_DIR = Path(__file__).resolve().parent
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
