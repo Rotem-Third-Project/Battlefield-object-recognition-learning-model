@@ -59,16 +59,11 @@
 
     <!-- 🖼️ 실시간 MJPEG 영상 -->
     <div>
-      <h3>탐지 영상</h3>
+      <h3 style="text-align: center; color: #00ff00">탐지 영상</h3>
       <img id="live-image" src="/video_feed" alt="탐지 결과" />
       <div
         id="fps"
-        style="
-          text-align: center;
-          color: #00ff00;
-          font-size: 0.9rem;
-          margin-top: 0.5rem;
-        "
+        style="text-align: center; color: #00ff00; font-size: 0.9rem; margin-top: 0.5rem"
       ></div>
     </div>
 
@@ -105,32 +100,17 @@
     <div class="command-panel">
       <input type="text" id="destInput" placeholder="x,y,z" />
       <button onclick="sendDestination()">📍 목적지 설정</button>
+
       <form method="post" action="/send_action" style="margin-top: 1rem">
         <input type="hidden" name="turret" value="ROTATE" />
         <input type="hidden" name="weight" value="1.0" />
         <button type="submit">🌀 포탑 회전</button>
       </form>
+
       <button onclick="sendBullet()">💥 발사</button>
     </div>
 
     <!-- 🧠 대시보드 JS -->
     <script src="/static/js/dashboard.js"></script>
-    <script>
-      // ✅ 로딩 스크린 제어
-      window.addEventListener("DOMContentLoaded", () => {
-        const img = document.getElementById("live-image");
-        const loading = document.getElementById("loading-screen");
-
-        if (img && loading) {
-          img.onload = () => {
-            loading.style.opacity = 0;
-            setTimeout(() => {
-              loading.style.display = "none";
-              img.style.display = "block";
-            }, 300);
-          };
-        }
-      });
-    </script>
   </body>
 </html>

@@ -37,7 +37,7 @@ BARREL_X, BARREL_Y = 960, 883
 TOLERANCE = 15
 
 gear_level = 2
-gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
+gear_weights = {1: 0.5, 2: 0.7, 3: 1.0}
 move_command_queue = []
 action_command_queue = []
 current_position = (0, 0)
@@ -46,6 +46,7 @@ latest_frame = None
 frame_lock = threading.Lock()
 tracking_active = False
 last_get_move_time = time.time()
+last_move = {"move": "STOP", "weight": 0.0}
 
 @app.on_event("startup")
 async def startup_event():
@@ -69,7 +70,7 @@ async def input_key(key: str = Form(...)):
 
 @app.get("/get_move")
 async def get_move():
-    global tracking_active, last_get_move_time
+    global tracking_active, last_get_move_time, last_move
 
     now = time.time()
     time_diff = now - last_get_move_time
@@ -86,7 +87,12 @@ async def get_move():
         tracking_active = False
 
     if move_command_queue:
-        return move_command_queue.pop(0)
+        last_move = move_command_queue.pop(0)
+        return last_move
+
+    if last_move["move"] in ["W", "A", "S", "D"]:
+        return {"move": last_move["move"], "weight": max(0.2, last_move["weight"] * 0.8)}
+
     return {"move": "DECELERATE", "weight": 0.2}
 
 @app.get("/get_action")
