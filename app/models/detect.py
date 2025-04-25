@@ -23,7 +23,7 @@ def detect_target(
             np_arr = np.frombuffer(image_bytes, np.uint8)
             img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-            results = model.track(img_cv, persist=True, show=False, tracker='custom_botsort.yaml')
+            results = model.track(img_cv, persist=True, show=False)
             result = results[0]
             boxes = result.boxes
             track_ids = result.boxes.id

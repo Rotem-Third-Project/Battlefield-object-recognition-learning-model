@@ -5,69 +5,49 @@
     <title>🪖 전차 전투 대시보드</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/static/css/style.css" />
-    <style>
-      /* 🔄 로딩 화면 */
-      .loading-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: black;
-        color: #00ff00;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        font-family: "Share Tech Mono", monospace;
-        z-index: 9999;
-        transition: opacity 0.4s ease;
-      }
+    <script defer src="/static/js/dashboard.js"></script>
+    <script defer>
+      async function updateHUD() {
+        try {
+          const res = await fetch('/get_hud');
+          const data = await res.json();
 
-      .loader {
-        border: 5px solid #333;
-        border-top: 5px solid #00ff00;
-        border-radius: 50%;
-        width: 50px;
-        height: 50px;
-        animation: spin 1s linear infinite;
-        margin-bottom: 1rem;
-      }
+          const crosshair = document.getElementById("crosshair");
+          const hudText = document.getElementById("hud-distance");
+          const distance = Math.round(data.distance);
+          hudText.textContent = `${distance}m`;
 
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
+          if (data.is_aimed) {
+            crosshair.style.borderColor = "limegreen";
+            hudText.style.color = "limegreen";
+          } else if (data.is_detected) {
+            crosshair.style.borderColor = "red";
+            hudText.style.color = "red";
+          } else {
+            crosshair.style.borderColor = "black";
+            hudText.style.color = "black";
+          }
+        } catch (err) {
+          console.warn("HUD 상태 갱신 실패", err);
         }
       }
-
-      #live-image {
-        display: none;
-        border: 2px solid #00ff00;
-        max-width: 100%;
-        margin: 1rem auto;
-        box-shadow: 0 0 10px #00ff00;
-      }
-    </style>
+      setInterval(updateHUD, 500);
+    </script>
+    
   </head>
 
   <body>
-    <!-- 🔄 로딩 스크린 -->
-    <div id="loading-screen" class="loading-overlay">
-      <div class="loader"></div>
-      <div id="loading-status">📡 대시보드 준비 중...</div>
     </div>
 
-    <!-- 🖼️ 실시간 MJPEG 영상 -->
     <div>
       <h3 style="text-align: center; color: #00ff00">탐지 영상</h3>
       <img id="live-image" src="/video_feed" alt="탐지 결과" />
-      <div
-        id="fps"
-        style="text-align: center; color: #00ff00; font-size: 0.9rem; margin-top: 0.5rem"
-      ></div>
+      <div id="fps" style="text-align: center; color: #00ff00; font-size: 0.9rem; margin-top: 0.5rem"></div>
     </div>
 
-    <!-- 📊 HUD -->
+    <div id="crosshair"></div>
+    <div id="hud-distance">-- m</div>
+
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
       <div class="hud-item" id="health">
@@ -93,10 +73,8 @@
       </div>
     </div>
 
-    <!-- ⚠️ 알림 -->
     <div id="alert-box" class="alert hidden">알림창</div>
 
-    <!-- 🎮 명령 패널 -->
     <div class="command-panel">
       <input type="text" id="destInput" placeholder="x,y,z" />
       <button onclick="sendDestination()">📍 목적지 설정</button>
@@ -109,8 +87,5 @@
 
       <button onclick="sendBullet()">💥 발사</button>
     </div>
-
-    <!-- 🧠 대시보드 JS -->
-    <script src="/static/js/dashboard.js"></script>
   </body>
 </html>
