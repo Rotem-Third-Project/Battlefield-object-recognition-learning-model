@@ -2,22 +2,23 @@ from flask import Flask, request, jsonify
 from ultralytics import YOLO
 import numpy as np
 import cv2
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+import torch
+torch.set_num_threads(1)
 
 app = Flask(__name__)  # 플라스크 객체 선언
 current_position = None
 
-
+model = YOLO("best.pt")
 @app.route("/", methods=["GET"])
 # 라우트 멍령어: 함수 실행하기 위해 어떤 URL 사용할 것인가 지정, '/' -> 루트이다
 # 헬로월드 켓 매소드로 받아보기
 def home():
     return "hello world"
 
-
-model = YOLO("yolov12_weight.pt")  # 미리 모델을 로드해두는 게 성능면에서 좋음
-
 BARREL_X = 960
-TOLERANCE = 200
+TOLERANCE = 100
 action_command = []
 move_command = []
 
@@ -44,7 +45,7 @@ def detect():
     boxes = results[0].boxes
     detections = boxes.data.cpu().numpy()
 
-    target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
+    target_classes = {0: "Enemy"}
     result_json = []
     target_candidates = []
 
@@ -79,7 +80,7 @@ def detect():
         corrected = kalman.correct(measurement)
         kx, ky = corrected[:2].flatten()
 
-        dx = kx - BARREL_X
+        dx = cx - BARREL_X
 
         if dx > TOLERANCE:
             action_command.append("E")
@@ -164,5 +165,5 @@ def update_position():
 # 서버 구동을 위한 메인 함수 필요
 if __name__ == "__main__":
     app.run(
-        host="0.0.0.0", port=5000
+        host="0.0.0.0", port=5000,threaded=True
     )  # app을 실행해라, 호스트는 0.0.0.0 -> 외부에서도 접근 가능?, 포트는 5000번으로
