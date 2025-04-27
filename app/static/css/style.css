@@ -14,45 +14,46 @@ h3 {
   font-size: 1.5rem;
 }
 
-/* === 영상 + 조준선 === */
-.video-container {
+/* === 메인 레이아웃 (탐지화면 + 리스트) === */
+.main-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+/* === 탐지영상 + 조준선 === */
+.video-section {
+  flex: 7;
+  position: relative;
+}
+
+.video-wrapper {
   position: relative;
   width: 100%;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
 }
 
 /* 실시간 MJPEG 영상 */
 #live-image {
-  width: 70vw; /* ✨ 화면 너비의 70% */
+  width: 100%;
   height: auto;
-  object-fit: contain;
-  display: none;
+  display: block;
   border: 2px solid #00ff00;
   margin: 1rem 0;
   box-shadow: 0 0 10px #00ff00;
 }
 
-/* FPS 표시 */
-#fps {
-  text-align: center;
-  font-size: 0.95rem;
-  color: #00ff00;
-  margin-top: 0.5rem;
-  font-weight: bold;
-}
-
-/* ✨ 조준선 Wrapper */
+/* ✨ 조준선 Wrapper (최종: 더 축소) */
 #crosshair-wrapper {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 14vw; /* ✨ 화면 너비의 14% */
-  height: 14vw;
-  min-width: 100px; /* ✨ 최소 크기 보장 */
-  min-height: 100px;
+  width: 7vw; /* ✨ 10vw → 7vw */
+  height: 7vw;
+  min-width: 56px; /* ✨ 80px → 56px */
+  min-height: 56px;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -74,6 +75,57 @@ h3 {
   color: black;
   font-weight: bold;
   text-shadow: 1px 1px 2px #000;
+}
+
+/* FPS 표시 */
+#fps {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #00ff00;
+  margin-top: 0.5rem;
+  font-weight: bold;
+}
+
+/* === 탐지된 객체 리스트 === */
+.object-list-section {
+  flex: 3;
+  max-height: 100%;
+  overflow-y: auto;
+  background-color: rgba(0, 255, 0, 0.05);
+  border: 2px solid #00ff00;
+  padding: 1rem;
+  box-shadow: 0 0 8px #00ff00;
+  border-radius: 10px;
+}
+
+/* 탐지 객체 테이블 */
+#object-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+#object-list th, #object-list td {
+  border: 1px solid #00ff00;
+  padding: 8px;
+  text-align: center;
+}
+
+#object-list th {
+  background-color: #111;
+  color: #00ff00;
+}
+
+#object-list tbody tr:nth-child(even) {
+  background-color: rgba(0, 255, 0, 0.05);
+}
+
+/* 반응형: 모바일 환경에서는 리스트 숨김 */
+@media (max-width: 768px) {
+  .object-list-section {
+    display: none;
+  }
 }
 
 /* === HUD 구성 === */
@@ -145,49 +197,6 @@ h3 {
 .bar:nth-child(3) { height: 22px; }
 .bar:nth-child(4) { height: 30px; }
 
-/* === 명령 패널 === */
-.command-panel {
-  text-align: center;
-  padding: 1rem;
-}
-
-.command-panel input,
-.command-panel button {
-  margin: 0.3rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid #00ff00;
-  background-color: #111;
-  color: #00ff00;
-  font-family: "Share Tech Mono", monospace;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-
-/* === 알림창 === */
-.alert {
-  position: fixed;
-  top: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.75rem 1.5rem;
-  background-color: #000;
-  border: 2px solid #00ff00;
-  color: #00ff00;
-  z-index: 999;
-  transition: opacity 0.3s;
-  font-size: 1rem;
-}
-
-.alert.danger {
-  border-color: #ff3c3c;
-  color: #ff3c3c;
-}
-
-.alert.hidden {
-  display: none;
-}
-
 /* === 로딩 화면 === */
 .loading-overlay {
   position: fixed;
@@ -220,26 +229,5 @@ h3 {
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-/* === 반응형 대응 === */
-@media (max-width: 600px) {
-  h3 {
-    font-size: 1.2rem;
-  }
-
-  .hud {
-    grid-template-columns: 1fr;
-  }
-
-  body {
-    font-size: 0.9rem;
-  }
-
-  .hud-item,
-  .command-panel input,
-  .command-panel button {
-    font-size: 0.95rem;
   }
 }

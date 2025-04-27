@@ -32,22 +32,26 @@ move_command_queue = []
 action_command_queue = []
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
-current_position = (0, 0)
+current_position = (60, 27)  # blStartX, blStartZ 기준
 
-# 📌 시뮬레이터 HUD 상태
+# 📌 시뮬레이터 HUD 상태 (초기값 세팅)
 simulator_status = {
-    "player_pos": {"x": 0, "y": 0, "z": 0},
+    "player_pos": {"x": 60, "y": 10, "z": 27.23},
     "player_speed": 0,
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
 }
 
+# 📌 감지된 객체 목록 (탐지 후 저장)
+detected_objects = []
+
 # 📌 서버 시작 시 큐 비우기
 @app.on_event("startup")
 async def clear_command_queues():
     move_command_queue.clear()
     action_command_queue.clear()
+    detected_objects.clear()
 
 # 📌 대시보드 페이지
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -92,7 +96,7 @@ async def get_action():
         return action_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-# 📌 YOLO 탐지 (메모리 직접 처리)
+# 📌 YOLO 탐지
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
     try:
@@ -111,7 +115,7 @@ async def detect(image: UploadFile = File(...)):
     crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
     crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
 
-    for box in detections:
+    for idx, box in enumerate(detections):
         class_id = int(box[5])
         if class_id in target_classes:
             x1, y1, x2, y2 = map(int, box[:4])
@@ -137,15 +141,26 @@ async def detect(image: UploadFile = File(...)):
 
             filtered_results.append({
                 'className': class_name,
+                'id': idx,  # 임시 ID 부여
+                'threat': "Normal",  # 기본 위협등급
                 'bbox': [x1, y1, x2, y2],
                 'confidence': confidence
             })
+
+    # ✅ 감지된 객체 글로벌 리스트 업데이트
+    detected_objects.clear()
+    detected_objects.extend(filtered_results)
 
     cv2.imwrite(str(TMP_PATH), img_cv)
 
     return JSONResponse(content=filtered_results)
 
-# 📌 MJPEG 스트리밍 (JPEG 퀄리티 최적화)
+# 📌 현재 감지된 객체 리스트 반환
+@app.get("/get_detected_objects")
+async def get_detected_objects():
+    return {"objects": detected_objects}
+
+# 📌 MJPEG 스트리밍
 @app.get("/video_feed")
 def video_feed():
     def generate():
@@ -163,48 +178,10 @@ def video_feed():
             time.sleep(0.016)
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
-# 📌 위치 업데이트
-@app.post("/update_position")
-async def update_position(request: Request):
-    global current_position
-    data = await request.json()
-    if "position" not in data:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing position data"})
-    try:
-        x, y, z = map(float, data["position"].split(","))
-        current_position = (int(x), int(z))
-        return {"status": "OK", "current_position": current_position}
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": str(e)})
-
-# 📌 탄환 충돌 업데이트
-@app.post("/update_bullet")
-async def update_bullet(request: Request):
-    data = await request.json()
-    return {"status": "OK", "message": "Bullet impact data received"}
-
-# 📌 목적지 설정
-@app.post("/set_destination")
-async def set_destination(request: Request):
-    data = await request.json()
-    if "destination" not in data:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing destination data"})
-    try:
-        x, y, z = map(float, data["destination"].split(","))
-        return {"status": "OK", "destination": {"x": x, "y": y, "z": z}}
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": f"Invalid format: {str(e)}"})
-
-# 📌 장애물 업데이트
-@app.post("/update_obstacle")
-async def update_obstacle(request: Request):
-    data = await request.json()
-    return {"status": "success", "message": "Obstacle data received"}
-
 # 📌 초기화 정보
 @app.get("/init")
 async def init():
-    return {
+    config = {
         "startMode": "start",
         "blStartX": 60,
         "blStartY": 10,
@@ -213,27 +190,8 @@ async def init():
         "rdStartY": 10,
         "rdStartZ": 280
     }
-
-# 📌 게임 시작
-@app.get("/start")
-async def start():
-    return {"control": ""}
-
-# 📌 시뮬레이터 정보 수신
-@app.post("/info")
-async def receive_simulator_info(request: Request):
-    try:
-        data = await request.json()
-
-        simulator_status["player_pos"] = data.get("playerPos", {})
-        simulator_status["player_speed"] = data.get("playerSpeed", 0)
-        simulator_status["player_health"] = data.get("playerHealth", 100)
-        simulator_status["enemy_health"] = data.get("enemyHealth", 100)
-        simulator_status["distance"] = data.get("distance", 0)
-
-        return JSONResponse(content={"status": "success", "message": "Data received"})
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+    print("🛠️ Initialization config sent via /init:", config)
+    return JSONResponse(content=config)
 
 # 📌 HUD 실시간 상태 요청
 @app.get("/get_status")
