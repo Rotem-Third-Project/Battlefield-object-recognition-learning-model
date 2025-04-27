@@ -8,57 +8,48 @@ import threading
 import webbrowser
 import os
 import time
-import asyncio
 from pathlib import Path
 import cv2
 import numpy as np
 
-# 📌 경로 설정
+# 탭 기본 설정
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 
-# 📌 서버 초기화
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-# 📌 YOLO 모델 로드
 model = YOLO(BASE_DIR / "models" / "best.pt")
 
-# 📌 글로벌 상태
 move_command_queue = []
 action_command_queue = []
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
-current_position = (60, 27)  # blStartX, blStartZ 기준
+current_position = (60, 27)
 
-# 📌 시뮬레이터 HUD 상태 (초기값 세팅)
+detected_objects = []
+
 simulator_status = {
     "player_pos": {"x": 60, "y": 10, "z": 27.23},
     "player_speed": 0,
     "player_health": 100,
     "enemy_health": 100,
-    "distance": 0,
+    "distance": 0
 }
 
-# 📌 감지된 객체 목록 (탐지 후 저장)
-detected_objects = []
-
-# 📌 서버 시작 시 큐 비우기
 @app.on_event("startup")
-async def clear_command_queues():
+async def clear_queues():
     move_command_queue.clear()
     action_command_queue.clear()
     detected_objects.clear()
 
-# 📌 대시보드 페이지
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
-# 📌 키 입력 처리
 @app.post("/input_key")
 async def input_key(key: str = Form(...)):
     global gear_level
@@ -70,33 +61,28 @@ async def input_key(key: str = Form(...)):
         gear_level -= 1
     return {"gear": gear_level}
 
-# 📌 이동 명령 전송
 @app.post("/send_move")
 async def send_move(move: str = Form(...), weight: float = Form(...)):
     move_command_queue.append({"move": move, "weight": weight})
     return RedirectResponse(url="/dashboard", status_code=303)
 
-# 📌 포탑 명령 전송
 @app.post("/send_action")
 async def send_action(turret: str = Form(...), weight: float = Form(...)):
     action_command_queue.append({"turret": turret, "weight": weight})
     return RedirectResponse(url="/dashboard", status_code=303)
 
-# 📌 이동 명령 가져오기
 @app.get("/get_move")
 async def get_move():
     if move_command_queue:
         return move_command_queue.pop(0)
     return {"move": "STOP", "weight": 1.0}
 
-# 📌 액션 명령 가져오기
 @app.get("/get_action")
 async def get_action():
     if action_command_queue:
         return action_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-# 📌 YOLO 탐지
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
     try:
@@ -141,13 +127,12 @@ async def detect(image: UploadFile = File(...)):
 
             filtered_results.append({
                 'className': class_name,
-                'id': idx,  # 임시 ID 부여
-                'threat': "Normal",  # 기본 위협등급
+                'id': idx,
+                'threat': "Normal",
                 'bbox': [x1, y1, x2, y2],
                 'confidence': confidence
             })
 
-    # ✅ 감지된 객체 글로벌 리스트 업데이트
     detected_objects.clear()
     detected_objects.extend(filtered_results)
 
@@ -155,12 +140,10 @@ async def detect(image: UploadFile = File(...)):
 
     return JSONResponse(content=filtered_results)
 
-# 📌 현재 감지된 객체 리스트 반환
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {"objects": detected_objects}
 
-# 📌 MJPEG 스트리밍
 @app.get("/video_feed")
 def video_feed():
     def generate():
@@ -178,7 +161,6 @@ def video_feed():
             time.sleep(0.016)
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
-# 📌 초기화 정보
 @app.get("/init")
 async def init():
     config = {
@@ -190,26 +172,34 @@ async def init():
         "rdStartY": 10,
         "rdStartZ": 280
     }
-    print("🛠️ Initialization config sent via /init:", config)
     return JSONResponse(content=config)
 
-# 📌 HUD 실시간 상태 요청
 @app.get("/get_status")
 async def get_status():
-    return {
-        "player_pos": simulator_status.get("player_pos", {}),
-        "player_speed": simulator_status.get("player_speed", 0),
-        "player_health": simulator_status.get("player_health", 100),
-        "enemy_health": simulator_status.get("enemy_health", 100),
-        "distance": simulator_status.get("distance", 0)
-    }
+    return simulator_status
 
-# 📌 서버 실행 시 브라우저 자동 열기
+@app.post("/info")
+async def receive_simulator_info(request: Request):
+    global simulator_status
+    try:
+        data = await request.json()
+
+        simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
+        simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
+        simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
+        simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
+        simulator_status["distance"] = data.get("distance", simulator_status["distance"])
+
+        return {"status": "success", "message": "Simulator info updated"}
+
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+
+
 def open_browser():
     time.sleep(1)
     webbrowser.open("http://localhost:5000/dashboard")
 
-# 📌 서버 실행
 if __name__ == "__main__":
     if os.environ.get("RUN_MAIN") != "true":
         threading.Thread(target=open_browser).start()
