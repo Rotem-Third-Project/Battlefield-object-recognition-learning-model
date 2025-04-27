@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Request, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Request, Form
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -13,34 +13,48 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# 📌 경로 기본 설정
+# 📌 경로 설정
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
-TMP_WORK_PATH = BASE_DIR / "tmp" / "temp_image_working.jpg"  # ✨ 안전 저장용
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 
+# 📌 서버 초기화
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
+# 📌 YOLO 모델 로드
 model = YOLO(BASE_DIR / "models" / "best.pt")
 
+# 📌 글로벌 상태
 move_command_queue = []
 action_command_queue = []
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (0, 0)
 
+# 📌 시뮬레이터 HUD 상태
+simulator_status = {
+    "player_pos": {"x": 0, "y": 0, "z": 0},
+    "player_speed": 0,
+    "player_health": 100,
+    "enemy_health": 100,
+    "distance": 0,
+}
+
+# 📌 서버 시작 시 큐 비우기
 @app.on_event("startup")
 async def clear_command_queues():
     move_command_queue.clear()
     action_command_queue.clear()
 
+# 📌 대시보드 페이지
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
+# 📌 키 입력 처리
 @app.post("/input_key")
 async def input_key(key: str = Form(...)):
     global gear_level
@@ -52,47 +66,50 @@ async def input_key(key: str = Form(...)):
         gear_level -= 1
     return {"gear": gear_level}
 
+# 📌 이동 명령 전송
 @app.post("/send_move")
 async def send_move(move: str = Form(...), weight: float = Form(...)):
     move_command_queue.append({"move": move, "weight": weight})
     return RedirectResponse(url="/dashboard", status_code=303)
 
+# 📌 포탑 명령 전송
 @app.post("/send_action")
 async def send_action(turret: str = Form(...), weight: float = Form(...)):
     action_command_queue.append({"turret": turret, "weight": weight})
     return RedirectResponse(url="/dashboard", status_code=303)
 
+# 📌 이동 명령 가져오기
 @app.get("/get_move")
 async def get_move():
     if move_command_queue:
         return move_command_queue.pop(0)
     return {"move": "STOP", "weight": 1.0}
 
+# 📌 액션 명령 가져오기
 @app.get("/get_action")
 async def get_action():
     if action_command_queue:
-        action = action_command_queue.pop(0)
-        print(f"🎯 {action['turret']} 명령 1회 사용 후 제거됨")
-        return action
+        return action_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
+# 📌 YOLO 탐지 (메모리 직접 처리)
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
-    with open(TMP_WORK_PATH, "wb") as f:
-        shutil.copyfileobj(image.file, f)
-
     try:
-        results = list(model(str(TMP_WORK_PATH), verbose=False, stream=True))
+        image_bytes = await image.read()
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        results = list(model.predict(img_cv, verbose=False, stream=True))
         detections = results[0].boxes.data.cpu().numpy()
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
 
-    target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
+    target_classes = {0: "enemy", 2: "car", 7: "truck", 15: "rock"}
     filtered_results = []
 
-    img_cv = cv2.imread(str(TMP_WORK_PATH))
     crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
-    crosshair = cv2.resize(crosshair, (60, 60), interpolation=cv2.INTER_AREA)
+    crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
 
     for box in detections:
         class_id = int(box[5])
@@ -124,13 +141,11 @@ async def detect(image: UploadFile = File(...)):
                 'confidence': confidence
             })
 
-    resized_img = cv2.resize(img_cv, (0, 0), fx=0.6, fy=0.6)
-    cv2.imwrite(str(TMP_WORK_PATH), resized_img)
-    TMP_WORK_PATH.replace(TMP_PATH)  # ✨ 완성된 프레임만 교체
+    cv2.imwrite(str(TMP_PATH), img_cv)
 
     return JSONResponse(content=filtered_results)
 
-# ✨ 안정적인 MJPEG 스트리밍
+# 📌 MJPEG 스트리밍 (JPEG 퀄리티 최적화)
 @app.get("/video_feed")
 def video_feed():
     def generate():
@@ -139,8 +154,8 @@ def video_feed():
                 frame = cv2.imread(str(TMP_PATH))
                 if frame is None:
                     time.sleep(0.005)
-                    continue  # YOLO가 저장 중일 수 있음
-                _, buffer = cv2.imencode(".jpg", frame)
+                    continue
+                _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
                 yield (
                     b"--frame\r\n"
                     b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
@@ -148,6 +163,7 @@ def video_feed():
             time.sleep(0.016)
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
+# 📌 위치 업데이트
 @app.post("/update_position")
 async def update_position(request: Request):
     global current_position
@@ -161,12 +177,13 @@ async def update_position(request: Request):
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "ERROR", "message": str(e)})
 
+# 📌 탄환 충돌 업데이트
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
     data = await request.json()
-    print(f"💥 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
     return {"status": "OK", "message": "Bullet impact data received"}
 
+# 📌 목적지 설정
 @app.post("/set_destination")
 async def set_destination(request: Request):
     data = await request.json()
@@ -178,12 +195,13 @@ async def set_destination(request: Request):
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "ERROR", "message": f"Invalid format: {str(e)}"})
 
+# 📌 장애물 업데이트
 @app.post("/update_obstacle")
 async def update_obstacle(request: Request):
     data = await request.json()
-    print("🪨 Obstacle Data:", data)
     return {"status": "success", "message": "Obstacle data received"}
 
+# 📌 초기화 정보
 @app.get("/init")
 async def init():
     return {
@@ -196,14 +214,44 @@ async def init():
         "rdStartZ": 280
     }
 
+# 📌 게임 시작
 @app.get("/start")
 async def start():
     return {"control": ""}
 
+# 📌 시뮬레이터 정보 수신
+@app.post("/info")
+async def receive_simulator_info(request: Request):
+    try:
+        data = await request.json()
+
+        simulator_status["player_pos"] = data.get("playerPos", {})
+        simulator_status["player_speed"] = data.get("playerSpeed", 0)
+        simulator_status["player_health"] = data.get("playerHealth", 100)
+        simulator_status["enemy_health"] = data.get("enemyHealth", 100)
+        simulator_status["distance"] = data.get("distance", 0)
+
+        return JSONResponse(content={"status": "success", "message": "Data received"})
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+
+# 📌 HUD 실시간 상태 요청
+@app.get("/get_status")
+async def get_status():
+    return {
+        "player_pos": simulator_status.get("player_pos", {}),
+        "player_speed": simulator_status.get("player_speed", 0),
+        "player_health": simulator_status.get("player_health", 100),
+        "enemy_health": simulator_status.get("enemy_health", 100),
+        "distance": simulator_status.get("distance", 0)
+    }
+
+# 📌 서버 실행 시 브라우저 자동 열기
 def open_browser():
     time.sleep(1)
     webbrowser.open("http://localhost:5000/dashboard")
 
+# 📌 서버 실행
 if __name__ == "__main__":
     if os.environ.get("RUN_MAIN") != "true":
         threading.Thread(target=open_browser).start()

@@ -4,6 +4,9 @@ let lastFrameTime = performance.now();
 let activeKeys = {};
 let moveIntervalMap = {};
 
+let currentCrosshairColor = [0, 0, 0]; // 현재 조준선 색 (RGB 배열)
+let targetCrosshairColor = [0, 0, 0];  // 목표 조준선 색 (RGB 배열)
+
 // ✅ MJPEG 수신되면 화면 전환 + FPS 측정
 window.addEventListener("DOMContentLoaded", () => {
   const img = document.getElementById("live-image");
@@ -23,7 +26,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  setTimeout(testConnection, 2000); // fallback
+  setTimeout(testConnection, 2000);
 
   if (img && loading) {
     img.onload = () => {
@@ -36,23 +39,22 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// ✅ 상태 주기적으로 가져오기
-function updateStatus() {
-  fetch("/status")
-    .then((res) => res.json())
-    .then((data) => {
-      updateGearUI(data.gear_level);
-      updatePosition(
-        `${data.current_position[0]}, ${data.current_position[1]}`
-      );
-      updateThreat(
-        data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음"
-      );
+// ✅ 서버 통신 시 신호 강도 체크 오버라이드
+const originalFetch = window.fetch;
+window.fetch = function (...args) {
+  return originalFetch(...args)
+    .then((res) => {
+      lastSignalTime = Date.now();
+      updateSignalStrength();
+      return res;
+    })
+    .catch((err) => {
+      updateSignalStrength();
+      throw err;
     });
-}
-setInterval(updateStatus, 1000);
+};
 
-// ✅ 통신 신호 상태 시각화
+// ✅ 통신 신호 시각화
 function updateSignalStrength() {
   const bars = document.querySelectorAll(".signal-bar .bar");
   const now = Date.now();
@@ -73,7 +75,6 @@ function updateSignalStrength() {
     signalBox.classList.toggle("signal-danger", activeCount === 0);
   }
 }
-setInterval(updateSignalStrength, 1000);
 
 // ✅ 체력 UI 갱신
 function updateHealth(hp) {
@@ -106,17 +107,10 @@ function updatePosition(pos) {
   if (elem) elem.textContent = `좌표: ${pos}`;
 }
 
-// ✅ 기어 UI
+// ✅ 기어 UI 갱신
 function updateGearUI(gear) {
   const elem = document.getElementById("gear-level");
   if (elem) elem.textContent = gear;
-
-  const stick = document.getElementById("joystick");
-  if (stick) {
-    stick.classList.remove("animate");
-    void stick.offsetWidth;
-    stick.classList.add("animate");
-  }
 }
 
 // ✅ 이동 명령 전송
@@ -149,10 +143,9 @@ document.addEventListener("keyup", (e) => {
   if (!activeKeys[key]) return;
   activeKeys[key] = false;
   clearInterval(moveIntervalMap[key]);
-  delete moveIntervalMap[key];
 });
 
-// ✅ 브라우저 포커스 잃었을 때 입력 중지
+// ✅ 포커스 잃었을 때 모든 입력 중지
 window.addEventListener("blur", () => {
   for (const key in moveIntervalMap) {
     clearInterval(moveIntervalMap[key]);
@@ -161,8 +154,7 @@ window.addEventListener("blur", () => {
   }
 });
 
-// ✅ SPACE → FIRE
-
+// ✅ SPACE 키 → FIRE
 document.addEventListener("keydown", (event) => {
   if (event.code === "Space" || event.key === " ") {
     event.preventDefault();
@@ -187,7 +179,7 @@ async function sendAction(turret = "FIRE") {
   await fetch("/send_action", { method: "POST", body: formData });
 }
 
-// ✅ BULLET 충돌 테스트 전송
+// ✅ BULLET 충돌 테스트
 async function sendBullet() {
   const body = { x: 12, y: 0, z: 18, hit: "enemy" };
   await fetch("/update_bullet", {
@@ -207,61 +199,98 @@ async function sendDestination() {
   });
 }
 
-// ✅ 좌표 서버 전송
-function syncPositionToServer(x, y, z) {
-  fetch("/update_position", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ position: `${x},${y},${z}` }),
-  })
+// ✅ 기본 상태 업데이트 (/status)
+function updateStatus() {
+  fetch("/status")
     .then((res) => res.json())
     .then((data) => {
-      if (data.status === "OK") {
-        updatePosition(
-          `${data.current_position[0]}, ${data.current_position[1]}`
-        );
-      }
+      updateGearUI(data.gear_level);
+      updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
+      updateThreat(data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음");
     });
 }
+setInterval(updateStatus, 1000);
 
-// ✅ fetch 통신 감지 오버라이드 (통신 신호 반영 핵심)
-const originalFetch = window.fetch;
-window.fetch = function (...args) {
-  return originalFetch(...args)
-    .then((res) => {
-      lastSignalTime = Date.now();
-      updateSignalStrength();
-      return res;
-    })
-    .catch((err) => {
-      updateSignalStrength();
-      throw err;
-    });
-};
+// ✅ 조준선 그리기
+function drawCrosshair(isDetected, isAimed) {
+  const canvas = document.getElementById("crosshair-canvas");
+  if (!canvas) return;
 
-// ✅ 조준선 HUD 갱신
+  const ctx = canvas.getContext("2d");
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const radius = 80;
+  
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const totalDots = 90;
+  const highlightRange = 20;
+
+  // 목표 색 결정
+  if (isAimed) targetCrosshairColor = [50, 205, 50]; // LimeGreen
+  else if (isDetected) targetCrosshairColor = [255, 0, 0]; // Red
+  else targetCrosshairColor = [0, 0, 0]; // Black
+
+  // 현재 색 보간
+  currentCrosshairColor = lerpColor(currentCrosshairColor, targetCrosshairColor, 0.2);
+
+  for (let i = 0; i < totalDots; i++) {
+    const angle = (i / totalDots) * 2 * Math.PI;
+    const x = centerX + radius * Math.cos(angle);
+    const y = centerY + radius * Math.sin(angle);
+
+    if (i >= (totalDots - highlightRange)) {
+      ctx.fillStyle = `rgb(${currentCrosshairColor[0]},${currentCrosshairColor[1]},${currentCrosshairColor[2]})`;
+    } else {
+      ctx.fillStyle = "black";
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+// ✅ 색 부드럽게 보간
+function lerpColor(current, target, factor) {
+  return [
+    Math.round(current[0] + (target[0] - current[0]) * factor),
+    Math.round(current[1] + (target[1] - current[1]) * factor),
+    Math.round(current[2] + (target[2] - current[2]) * factor)
+  ];
+}
+
+// ✅ 조준선 + 거리 갱신 (/get_hud)
 async function updateHUD() {
   try {
     const res = await fetch("/get_hud");
     const data = await res.json();
 
-    const crosshair = document.getElementById("crosshair");
     const hudText = document.getElementById("hud-distance");
-    const distance = Math.round(data.distance);
-    hudText.textContent = `${distance}m`;
-
-    if (data.is_aimed) {
-      crosshair.style.borderColor = "limegreen";
-      hudText.style.color = "limegreen";
-    } else if (data.is_detected) {
-      crosshair.style.borderColor = "red";
-      hudText.style.color = "red";
-    } else {
-      crosshair.style.borderColor = "black";
-      hudText.style.color = "black";
+    if (hudText) {
+      hudText.textContent = isFinite(data.distance) ? `${Math.round(data.distance)}m` : "-- m";
     }
+
+    drawCrosshair(data.is_detected, data.is_aimed);
+
   } catch (err) {
     console.warn("HUD 상태 갱신 실패", err);
   }
 }
 setInterval(updateHUD, 500);
+
+// ✅ 시뮬레이터 상태 업데이트 (/get_status)
+async function updateSimulatorHUD() {
+  try {
+    const res = await fetch("/get_status");
+    const data = await res.json();
+
+    updateSpeed(data.player_speed.toFixed(1));
+    updatePosition(`X=${data.player_pos.x.toFixed(1)}, Z=${data.player_pos.z.toFixed(1)}`);
+    updateHealth(data.player_health);
+
+  } catch (err) {
+    console.warn("시뮬레이터 HUD 갱신 실패", err);
+  }
+}
+setInterval(updateSimulatorHUD, 100);

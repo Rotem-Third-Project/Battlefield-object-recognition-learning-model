@@ -17,25 +17,23 @@
 
     <!-- 🖼️ 실시간 MJPEG 영상 + 조준선 -->
     <div class="video-container">
-      <h3 style="text-align: center; color: #00ff00">탐지 영상</h3>
+      <h3>탐지 영상</h3>
       <img id="live-image" src="/video_feed" alt="탐지 결과" />
-      <div
-        id="fps"
-        style="
-          text-align: center;
-          color: #00ff00;
-          font-size: 0.9rem;
-          margin-top: 0.5rem;
-        "
-      ></div>
+      <div id="fps"></div>
 
-      <div id="crosshair"></div>
-      <div id="hud-distance">-- m</div>
+      <!-- ✨ 조준선 + 거리 텍스트 -->
+      <div id="crosshair-wrapper">
+        <canvas id="crosshair-canvas" width="200" height="200"></canvas>
+        <div id="hud-distance">-- m</div>
+      </div>
     </div>
 
-    <!-- 📊 HUD 정보 -->
+    <!-- 📊 HUD 정보 패널 -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
+
+      <div class="hud-item" id="position">좌표: 없음</div>
+
       <div class="hud-item" id="health">
         <div>전차 체력</div>
         <div class="health-bar">
@@ -43,7 +41,9 @@
         </div>
         <div id="health-text">100%</div>
       </div>
+
       <div class="hud-item danger" id="threat">🚨 위협 감지: 없음</div>
+
       <div class="hud-item" id="comm">
         <div>📡 통신 신호</div>
         <div class="signal-bar">
@@ -53,27 +53,13 @@
           <div class="bar"></div>
         </div>
       </div>
-      <div class="hud-item" id="position">좌표: 없음</div>
+
       <div class="hud-item" id="gear">
         🔧 기어: <span id="gear-level">2</span>
       </div>
     </div>
 
-    <!-- ⚠️ 알림 -->
+    <!-- ⚠️ 알림창 -->
     <div id="alert-box" class="alert hidden">알림창</div>
-
-    <!-- 🎮 명령 패널 -->
-    <div class="command-panel">
-      <input type="text" id="destInput" placeholder="x,y,z" />
-      <button onclick="sendDestination()">📍 목적지 설정</button>
-
-      <form method="post" action="/send_action" style="margin-top: 1rem">
-        <input type="hidden" name="turret" value="ROTATE" />
-        <input type="hidden" name="weight" value="1.0" />
-        <button type="submit">🌀 포탑 회전</button>
-      </form>
-
-      <button onclick="sendBullet()">💥 발사</button>
-    </div>
   </body>
 </html>
