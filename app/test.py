@@ -93,8 +93,10 @@ def detect():
     annotated_path = "annotated_" + (image.filename or "temp.jpg")
     img = cv2.imread(image_path)
 
-    # 2) YOLO 검출
-    results = model(image_path)
+    # YOLO 모델로 객체 검출 (deep_sort 추적도 포함)
+    results = model.track(image_path, persist=True, show=False, conf=0.5)
+    boxes = results[0].boxes
+    detections = boxes.data.cpu().numpy()
     detections = results[0].boxes.data.cpu().numpy()
 
     # 3) Deep SORT 입력 리스트 생성 (픽셀 좌표 그대로)
