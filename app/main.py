@@ -195,7 +195,6 @@ async def receive_simulator_info(request: Request):
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
 
-
 def open_browser():
     time.sleep(1)
     webbrowser.open("http://localhost:5000/dashboard")
