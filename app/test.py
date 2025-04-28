@@ -24,10 +24,10 @@ last_candidate_box = None
 
 # 기본 예시 (YAML 없이)
 tracker = DeepSort(
-    max_age=15,
+    max_age=60,
     n_init=1,
-    max_iou_distance=0.5,
-    max_cosine_distance=0.4,
+    max_iou_distance=0.8,
+    max_cosine_distance=0.5,
     nn_budget=100,
     embedder="mobilenet",  # appearance 모델 선택
     half=True,  # FP16 사용 여부
@@ -93,10 +93,8 @@ def detect():
     annotated_path = "annotated_" + (image.filename or "temp.jpg")
     img = cv2.imread(image_path)
 
-    # YOLO 모델로 객체 검출 (deep_sort 추적도 포함)
-    results = model.track(image_path, persist=True, show=False, conf=0.5)
-    boxes = results[0].boxes
-    detections = boxes.data.cpu().numpy()
+    # 2) YOLO 검출
+    results = model(image_path)
     detections = results[0].boxes.data.cpu().numpy()
 
     # 3) Deep SORT 입력 리스트 생성 (픽셀 좌표 그대로)
@@ -119,7 +117,7 @@ def detect():
             new_x1, new_y1 = cx - w / 2, cy - h / 2
             new_x2, new_y2 = cx + w / 2, cy + h / 2
             ltrb_box = [new_x1, new_y1, new_x2, new_y2]
-
+            tlwh_box = [new_x1, new_y1, new_x2 - new_x1, new_y2 - new_y1]
             # 🔹 2. 이미지 크기 안으로 제한
             img_h, img_w = img.shape[:2]
             new_x1, new_y1 = max(0, new_x1), max(0, new_y1)
@@ -128,7 +126,7 @@ def detect():
             # 🔹 3. DeepSort용 리스트에 추가 (tlwh 형식)
             detection_list.append(
                 (
-                    [new_x1, new_y1, new_x2 - new_x1, new_y2 - new_y1],
+                    tlwh_box,
                     float(conf),
                     target_classes[cid],
                 )
@@ -136,6 +134,23 @@ def detect():
 
     # 4) 트래킹 업데이트
     tracks = tracker.update_tracks(detection_list, frame=img)
+
+    def compute_inclusion(yolo_box, track_box):
+        """
+        YOLO 박스가 트랙 박스 안에 얼마나 포함됐는지 계산 (0~1 사이 비율)
+        """
+        xA = max(yolo_box[0], track_box[0])
+        yA = max(yolo_box[1], track_box[1])
+        xB = min(yolo_box[2], track_box[2])
+        yB = min(yolo_box[3], track_box[3])
+
+        inter_w = max(0, xB - xA)
+        inter_h = max(0, yB - yA)
+        inter_area = inter_w * inter_h
+
+        yolo_area = (yolo_box[2] - yolo_box[0]) * (yolo_box[3] - yolo_box[1])
+
+        return inter_area / yolo_area if yolo_area > 0 else 0
 
     # 5) detection_list 인덱스 → track_id 매핑 (IoU 확률 기반)
     def compute_iou(b1, b2):
@@ -153,17 +168,20 @@ def detect():
     for track in tracks:
         if not track.is_confirmed():
             continue
-        l, t, r, b = map(int, track.to_ltrb())  # ★ 수정
+        l, t, r, b = map(int, track.to_ltrb())
         track_box = [l, t, r, b]
 
-        best_iou, best_idx = 0.0, None
+        best_inclusion, best_idx = 0.0, None
         for idx, det in enumerate(detection_list):
-            yolo_box = det[0]
-            iou = compute_iou(ltrb_box, track_box)
-            if iou > best_iou:
-                best_iou, best_idx = iou, idx
+            det_tlwh, conf, label = det
+            x, y, w, h = det_tlwh
+            yolo_box = [x, y, x + w, y + h]
 
-        if best_iou >= 0.01:  # 임계값 상황에 맞게
+            inclusion = compute_inclusion(yolo_box, track_box)
+            if inclusion > best_inclusion:
+                best_inclusion, best_idx = inclusion, idx
+
+        if best_inclusion >= 0.5:  # 🔥 포함률이 50% 이상일 때 매핑
             track_to_det[best_idx] = track.track_id
 
     # 6) 시각화: YOLO 박스(초록) + DeepSort 트랙 박스(빨강)
