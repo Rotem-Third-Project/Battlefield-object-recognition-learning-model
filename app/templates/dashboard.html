@@ -5,51 +5,63 @@
     <title>🪖 전차 전투 대시보드</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/static/css/style.css" />
-    <script defer src="/static/js/dashboard.js"></script>
-    <script defer>
-      async function updateHUD() {
-        try {
-          const res = await fetch('/get_hud');
-          const data = await res.json();
-
-          const crosshair = document.getElementById("crosshair");
-          const hudText = document.getElementById("hud-distance");
-          const distance = Math.round(data.distance);
-          hudText.textContent = `${distance}m`;
-
-          if (data.is_aimed) {
-            crosshair.style.borderColor = "limegreen";
-            hudText.style.color = "limegreen";
-          } else if (data.is_detected) {
-            crosshair.style.borderColor = "red";
-            hudText.style.color = "red";
-          } else {
-            crosshair.style.borderColor = "black";
-            hudText.style.color = "black";
-          }
-        } catch (err) {
-          console.warn("HUD 상태 갱신 실패", err);
-        }
-      }
-      setInterval(updateHUD, 500);
-    </script>
     
+    <!-- ✅ JS 파일 로드: dashboard → crosshair 분리 -->
+    <script defer src="/static/js/dashboard.js"></script>
+    <script defer src="/static/js/crosshair.js"></script>
   </head>
 
   <body>
+    <!-- 🔄 로딩 스크린 -->
+    <div id="loading-screen" class="loading-overlay">
+      <div class="loader"></div>
+      <div id="loading-status">📡 대시보드 준비 중...</div>
     </div>
 
-    <div>
-      <h3 style="text-align: center; color: #00ff00">탐지 영상</h3>
-      <img id="live-image" src="/video_feed" alt="탐지 결과" />
-      <div id="fps" style="text-align: center; color: #00ff00; font-size: 0.9rem; margin-top: 0.5rem"></div>
+    <!-- 🖼️ 메인 컨테이너 (탐지 영상 + 객체 리스트) -->
+    <div class="main-container">
+      <!-- 탐지영상 + 조준선 -->
+      <div class="video-section">
+        <h3>탐지 영상</h3>
+        <div class="video-wrapper">
+          <img id="live-image" src="/video_feed" alt="탐지 결과" />
+          
+          <!-- ✨ 조준선 + 거리 텍스트 -->
+          <div id="crosshair-wrapper">
+            <canvas id="crosshair-canvas" width="200" height="200"></canvas>
+            <div id="hud-distance">-- m</div>
+          </div>
+        </div>
+        <div id="fps"></div>
+      </div>
+
+      <!-- 탐지된 객체 리스트 테이블 -->
+      <div class="object-list-section">
+        <h3>탐지된 객체 목록</h3>
+        <div class="object-list-wrapper">
+          <table id="object-list">
+            <thead>
+              <tr>
+                <th>클래스명</th>
+                <th>ID</th>
+                <th>위험등급</th>
+                <th>위치</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" style="text-align:center;">위험요소 없음</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
-    <div id="crosshair"></div>
-    <div id="hud-distance">-- m</div>
-
+    <!-- 📊 HUD 정보 패널 -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
+      <div class="hud-item" id="position">좌표: 없음</div>
       <div class="hud-item" id="health">
         <div>전차 체력</div>
         <div class="health-bar">
@@ -67,25 +79,12 @@
           <div class="bar"></div>
         </div>
       </div>
-      <div class="hud-item" id="position">좌표: 없음</div>
       <div class="hud-item" id="gear">
         🔧 기어: <span id="gear-level">2</span>
       </div>
     </div>
 
+    <!-- ⚠️ 알림창 -->
     <div id="alert-box" class="alert hidden">알림창</div>
-
-    <div class="command-panel">
-      <input type="text" id="destInput" placeholder="x,y,z" />
-      <button onclick="sendDestination()">📍 목적지 설정</button>
-
-      <form method="post" action="/send_action" style="margin-top: 1rem">
-        <input type="hidden" name="turret" value="ROTATE" />
-        <input type="hidden" name="weight" value="1.0" />
-        <button type="submit">🌀 포탑 회전</button>
-      </form>
-
-      <button onclick="sendBullet()">💥 발사</button>
-    </div>
   </body>
 </html>

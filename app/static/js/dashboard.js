@@ -23,7 +23,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  setTimeout(testConnection, 2000); // fallback
+  setTimeout(testConnection, 2000);
 
   if (img && loading) {
     img.onload = () => {
@@ -35,84 +35,6 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 });
-
-// ✅ 상태 주기적으로 가져오기
-function updateStatus() {
-  fetch("/status")
-    .then((res) => res.json())
-    .then((data) => {
-      updateGearUI(data.gear_level);
-      updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
-      updateThreat(data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음");
-    });
-}
-setInterval(updateStatus, 1000);
-
-// ✅ 통신 신호 상태 시각화
-function updateSignalStrength() {
-  const bars = document.querySelectorAll(".signal-bar .bar");
-  const now = Date.now();
-  const delay = now - lastSignalTime;
-
-  let activeCount = 4;
-  if (delay > 4000) activeCount = 0;
-  else if (delay > 3000) activeCount = 1;
-  else if (delay > 2000) activeCount = 2;
-  else if (delay > 1000) activeCount = 3;
-
-  bars.forEach((bar, idx) => {
-    bar.style.backgroundColor = idx < activeCount ? "#00ff00" : "#222";
-  });
-
-  const signalBox = document.getElementById("comm");
-  if (signalBox) {
-    signalBox.classList.toggle("signal-danger", activeCount === 0);
-  }
-}
-setInterval(updateSignalStrength, 1000);
-
-// ✅ 체력 UI 갱신
-function updateHealth(hp) {
-  const fill = document.getElementById("health-fill");
-  const text = document.getElementById("health-text");
-  const healthItem = document.getElementById("health");
-
-  fill.style.width = `${hp}%`;
-  fill.style.backgroundColor = hp >= 70 ? "#00ff00" : hp >= 40 ? "#ffd700" : "#ff3c3c";
-  text.textContent = `${hp}%`;
-  healthItem.classList.toggle("danger", hp < 40);
-}
-
-// ✅ 위협 감지 UI
-function updateThreat(threat) {
-  const elem = document.getElementById("threat");
-  if (elem) elem.textContent = `🚨 위협 감지: ${threat}`;
-}
-
-// ✅ 속도 표시
-function updateSpeed(speed) {
-  const elem = document.getElementById("speed");
-  if (elem) elem.textContent = `속도: ${speed} km/h`;
-}
-
-// ✅ 위치 표시
-function updatePosition(pos) {
-  const elem = document.getElementById("position");
-  if (elem) elem.textContent = `좌표: ${pos}`;
-}
-
-// ✅ 기어 UI
-function updateGearUI(gear) {
-  const elem = document.getElementById("gear-level");
-  if (elem) elem.textContent = gear;
-
-  const stick = document.getElementById("joystick");
-  if (stick) {
-    stick.classList.remove("animate");
-    void stick.offsetWidth;
-    stick.classList.add("animate");
-  }
-}
 
 // ✅ 이동 명령 전송
 function sendKeyCommand(key) {
@@ -128,7 +50,7 @@ function sendKeyCommand(key) {
     .catch((err) => console.warn("명령 전송 실패:", err));
 }
 
-// ✅ 지속 입력 처리
+// ✅ 키 입력 처리
 document.addEventListener("keydown", (e) => {
   const key = e.key.toUpperCase();
   if (!["W", "A", "S", "D", "P", "L"].includes(key)) return;
@@ -144,10 +66,9 @@ document.addEventListener("keyup", (e) => {
   if (!activeKeys[key]) return;
   activeKeys[key] = false;
   clearInterval(moveIntervalMap[key]);
-  delete moveIntervalMap[key];
 });
 
-// ✅ 브라우저 포커스 잃었을 때 입력 중지
+// ✅ 포커스 잃으면 모든 입력 정지
 window.addEventListener("blur", () => {
   for (const key in moveIntervalMap) {
     clearInterval(moveIntervalMap[key]);
@@ -156,7 +77,7 @@ window.addEventListener("blur", () => {
   }
 });
 
-// ✅ SPACE → FIRE
+// ✅ SPACE 키 → FIRE
 document.addEventListener("keydown", (event) => {
   if (event.code === "Space" || event.key === " ") {
     event.preventDefault();
@@ -166,6 +87,7 @@ document.addEventListener("keydown", (event) => {
     }
   }
 });
+
 document.addEventListener("keyup", (event) => {
   if (event.code === "Space" || event.key === " ") {
     activeKeys["FIRE"] = false;
@@ -180,52 +102,97 @@ async function sendAction(turret = "FIRE") {
   await fetch("/send_action", { method: "POST", body: formData });
 }
 
-// ✅ BULLET 충돌 테스트 전송
-async function sendBullet() {
-  const body = { x: 12, y: 0, z: 18, hit: "enemy" };
-  await fetch("/update_bullet", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-// ✅ 목적지 전송
-async function sendDestination() {
-  const dest = document.getElementById("destInput").value;
-  await fetch("/set_destination", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ destination: dest }),
-  });
-}
-
-// ✅ 좌표 서버 전송
-function syncPositionToServer(x, y, z) {
-  fetch("/update_position", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ position: `${x},${y},${z}` }),
-  })
+// ✅ 기본 상태 업데이트
+function updateStatus() {
+  fetch("/status")
     .then((res) => res.json())
     .then((data) => {
-      if (data.status === "OK") {
-        updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
-      }
+      updateGearUI(data.gear_level);
+      updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
+      updateThreat(data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음");
     });
 }
+setInterval(updateStatus, 1000);
 
-// ✅ fetch 통신 감지 오버라이드 (통신 신호 반영 핵심)
-const originalFetch = window.fetch;
-window.fetch = function (...args) {
-  return originalFetch(...args)
-    .then((res) => {
-      lastSignalTime = Date.now();
-      updateSignalStrength();
-      return res;
-    })
-    .catch((err) => {
-      updateSignalStrength();
-      throw err;
-    });
-};
+// ✅ HUD 요소 갱신
+function updateSpeed(speed) {
+  const elem = document.getElementById("speed");
+  if (elem) elem.textContent = `속도: ${speed} km/h`;
+}
+
+function updatePosition(pos) {
+  const elem = document.getElementById("position");
+  if (elem) elem.textContent = `좌표: ${pos}`;
+}
+
+function updateHealth(hp) {
+  const fill = document.getElementById("health-fill");
+  const text = document.getElementById("health-text");
+  const healthItem = document.getElementById("health");
+
+  fill.style.width = `${hp}%`;
+  fill.style.backgroundColor =
+    hp >= 70 ? "#00ff00" : hp >= 40 ? "#ffd700" : "#ff3c3c";
+  text.textContent = `${hp}%`;
+  healthItem.classList.toggle("danger", hp < 40);
+}
+
+function updateThreat(threat) {
+  const elem = document.getElementById("threat");
+  if (elem) elem.textContent = `🚨 위협 감지: ${threat}`;
+}
+
+function updateGearUI(gear) {
+  const elem = document.getElementById("gear-level");
+  if (elem) elem.textContent = gear;
+}
+
+// ✅ 탐지된 객체 리스트 갱신
+async function updateObjectList() {
+  try {
+    const res = await fetch("/get_detected_objects");
+    const data = await res.json();
+
+    const tableBody = document.querySelector("#object-list tbody");
+    tableBody.innerHTML = ""; // 테이블 초기화
+
+    if (data.objects.length === 0) {
+      tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">위험요소 없음</td></tr>';
+    } else {
+      data.objects.forEach((object) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${object.className}</td>
+          <td>${object.id}</td>
+          <td>${object.threat}</td>
+          <td>${object.bbox.join(', ')}</td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+  } catch (err) {
+    console.warn("탐지된 객체 리스트 갱신 실패", err);
+  }
+}
+setInterval(updateObjectList, 1000);
+
+// ✅ 시뮬레이터 HUD 실시간 상태 갱신
+async function updateSimulatorHUD() {
+  try {
+    const res = await fetch("/get_status");
+    const data = await res.json();
+
+    updateSpeed(data.player_speed.toFixed(1));
+    updatePosition(`X=${data.player_pos.x.toFixed(1)}, Z=${data.player_pos.z.toFixed(1)}`);
+    updateHealth(data.player_health);
+  } catch (err) {
+    console.warn("시뮬레이터 HUD 갱신 실패", err);
+  }
+}
+setInterval(updateSimulatorHUD, 100);
+
+// ✅ 조준원 그리기 (crosshair) 함수 업데이트 (변경된 대로 유지)
+function drawCrosshair(isDetected, isAimed) {
+  // Crosshair 그리기 코드 계속...
+}
+setInterval(updateCrosshair, 500);  // 500ms 간격으로 업데이트
