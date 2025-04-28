@@ -9,6 +9,18 @@
     <!-- ✅ JS 파일 로드: dashboard → crosshair 분리 -->
     <script defer src="/static/js/dashboard.js"></script>
     <script defer src="/static/js/crosshair.js"></script>
+    <style>
+      /* 위험 등급 색상 스타일링 */
+      .threat-level-1 { color: #28a745; font-weight: bold; } /* 초록 */
+      .threat-level-2 { color: #ff9800; font-weight: bold; } /* 주황 */
+      .threat-level-3 { color: #dc3545; font-weight: bold; } /* 빨강 */
+      .threat-normal { color: gray; }
+      .threat-none { color: #666; }
+      /* HUD 위협 감지 색상 */
+      .danger.threat-level-1 { background-color: rgba(40, 167, 69, 0.1); }
+      .danger.threat-level-2 { background-color: rgba(255, 152, 0, 0.1); }
+      .danger.threat-level-3 { background-color: rgba(220, 53, 69, 0.1); }
+    </style>
   </head>
 
   <body>
@@ -48,7 +60,7 @@
                 <th>위치</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="object-list-body">
               <tr>
                 <td colspan="4" style="text-align:center;">위험요소 없음</td>
               </tr>
@@ -86,5 +98,74 @@
 
     <!-- ⚠️ 알림창 -->
     <div id="alert-box" class="alert hidden">알림창</div>
+
+    <script>
+      // 객체 목록 업데이트
+      async function updateObjects() {
+        try {
+          const response = await fetch('/get_detected_objects');
+          const data = await response.json();
+          const objectListBody = document.getElementById('object-list-body');
+          const threatDiv = document.getElementById('threat');
+
+          // 객체 목록 초기화
+          objectListBody.innerHTML = '';
+
+          if (data.objects.length === 0) {
+            objectListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">위험요소 없음</td></tr>';
+            threatDiv.innerHTML = '🚨 위협 감지: 없음';
+            threatDiv.className = 'hud-item danger threat-none';
+            return;
+          }
+
+          // 위험 등급 우선순위 (LEVEL 3 > LEVEL 2 > LEVEL 1)
+          const threatPriority = { 'LEVEL 3': 3, 'LEVEL 2': 2, 'LEVEL 1': 1, 'Normal': 0 };
+          let highestThreat = 'Normal';
+          let highestThreatLevel = 0;
+
+          // 객체 목록 표시
+          data.objects.forEach(obj => {
+            const threatClass = obj.threat === 'LEVEL 1' ? 'threat-level-1' :
+                              obj.threat === 'LEVEL 2' ? 'threat-level-2' :
+                              obj.threat === 'LEVEL 3' ? 'threat-level-3' :
+                              'threat-normal';
+
+            // 위치 정보 (바운딩 박스 중심)
+            const x = Math.round((obj.bbox[0] + obj.bbox[2]) / 2);
+            const y = Math.round((obj.bbox[1] + obj.bbox[3]) / 2);
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${obj.className}</td>
+              <td>${obj.id}</td>
+              <td><span class="${threatClass}">${obj.threat}</span></td>
+              <td>(${x}, ${y})</td>
+            `;
+            objectListBody.appendChild(row);
+
+            // 가장 높은 위험 등급 계산
+            const threatLevel = threatPriority[obj.threat] || 0;
+            if (threatLevel > highestThreatLevel) {
+              highestThreatLevel = threatLevel;
+              highestThreat = obj.threat;
+            }
+          });
+
+          // HUD 위협 감지 업데이트
+          const threatClass = highestThreat === 'LEVEL 1' ? 'threat-level-1' :
+                             highestThreat === 'LEVEL 2' ? 'threat-level-2' :
+                             highestThreat === 'LEVEL 3' ? 'threat-level-3' :
+                             'threat-normal';
+          threatDiv.innerHTML = `🚨 위협 감지: <span class="${threatClass}">${highestThreat}</span>`;
+          threatDiv.className = `hud-item danger ${threatClass}`;
+        } catch (error) {
+          console.error('Error updating objects:', error);
+        }
+      }
+
+      // 주기적으로 객체 목록 업데이트
+      setInterval(updateObjects, 1000);
+      updateObjects();
+    </script>
   </body>
 </html>

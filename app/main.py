@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from ultralytics import YOLO
+import tensorflow as tf
 import shutil
 import threading
 import webbrowser
@@ -17,13 +18,16 @@ from models.detect import detect as detect_func
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "efficientnetb0_model.h5"  # EfficientNet 모델 경로
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-model = YOLO(BASE_DIR / "models" / "best.pt")
+# 모델 로드
+yolo_model = YOLO(BASE_DIR / "models" / "best.pt")
+efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH)
 
 move_command_queue = []
 action_command_queue = []
@@ -88,7 +92,8 @@ async def get_action():
 async def detect_api(image: UploadFile = File(...)):
     return await detect_func(
         image=image,
-        model=model,
+        yolo_model=yolo_model,
+        efficientnet_model=efficientnet_model,  # EfficientNet 모델 전달
         crosshair_path=CROSSHAIR_PATH,
         tmp_path=TMP_PATH,
         detected_objects=detected_objects
@@ -148,7 +153,6 @@ async def receive_simulator_info(request: Request):
 
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
-
 
 def open_browser():
     time.sleep(1)
