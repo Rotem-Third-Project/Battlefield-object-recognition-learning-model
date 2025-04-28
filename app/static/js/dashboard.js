@@ -1,64 +1,123 @@
-// ✅ 실시간 감지 이미지 롱폴링
-let lastMtime = 0;
+// ✅ 상태 추적 변수
+let lastSignalTime = Date.now();
+let lastFrameTime = performance.now();
+let activeKeys = {};
+let moveIntervalMap = {};
 
-function refreshImage() {
+// ✅ MJPEG 수신되면 화면 전환 + FPS 측정
+window.addEventListener("DOMContentLoaded", () => {
   const img = document.getElementById("live-image");
-  const timestamp = new Date().getTime();
-  img.src = `/tmp/temp_image.jpg?time=${timestamp}`; // 캐시 무력화
+  const loading = document.getElementById("loading-screen");
+  const fpsElem = document.getElementById("fps");
+
+  let connected = false;
+
+  const testConnection = () => {
+    if (!connected && img.complete) {
+      connected = true;
+      if (loading) loading.style.opacity = 0;
+      setTimeout(() => {
+        loading.style.display = "none";
+        img.style.display = "block";
+      }, 300);
+    }
+  };
+
+  setTimeout(testConnection, 2000);
+
+  if (img && loading) {
+    img.onload = () => {
+      const now = performance.now();
+      const fps = (1000 / (now - lastFrameTime)).toFixed(1);
+      lastFrameTime = now;
+      if (fpsElem) fpsElem.textContent = `FPS: ${fps}`;
+      testConnection();
+    };
+  }
+});
+
+// ✅ 이동 명령 전송
+function sendKeyCommand(key) {
+  const formData = new FormData();
+  formData.append("key", key);
+
+  fetch("/input_key", {
+    method: "POST",
+    body: formData,
+  })
+    .then((res) => res.json())
+    .then((data) => updateGearUI(data.gear))
+    .catch((err) => console.warn("명령 전송 실패:", err));
 }
 
-function pollForNewImage() {
-  fetch(`/check_new_frame?last_mtime=${lastMtime}`)
+// ✅ 키 입력 처리
+document.addEventListener("keydown", (e) => {
+  const key = e.key.toUpperCase();
+  if (!["W", "A", "S", "D", "P", "L"].includes(key)) return;
+  if (activeKeys[key]) return;
+
+  activeKeys[key] = true;
+  sendKeyCommand(key);
+  moveIntervalMap[key] = setInterval(() => sendKeyCommand(key), 200);
+});
+
+document.addEventListener("keyup", (e) => {
+  const key = e.key.toUpperCase();
+  if (!activeKeys[key]) return;
+  activeKeys[key] = false;
+  clearInterval(moveIntervalMap[key]);
+});
+
+// ✅ 포커스 잃으면 모든 입력 정지
+window.addEventListener("blur", () => {
+  for (const key in moveIntervalMap) {
+    clearInterval(moveIntervalMap[key]);
+    delete moveIntervalMap[key];
+    activeKeys[key] = false;
+  }
+});
+
+// ✅ SPACE 키 → FIRE
+document.addEventListener("keydown", (event) => {
+  if (event.code === "Space" || event.key === " ") {
+    event.preventDefault();
+    if (!activeKeys["FIRE"]) {
+      activeKeys["FIRE"] = true;
+      sendAction("FIRE");
+    }
+  }
+});
+
+document.addEventListener("keyup", (event) => {
+  if (event.code === "Space" || event.key === " ") {
+    activeKeys["FIRE"] = false;
+  }
+});
+
+// ✅ ACTION 전송
+async function sendAction(turret = "FIRE") {
+  const formData = new FormData();
+  formData.append("turret", turret);
+  formData.append("weight", "1.0");
+  await fetch("/send_action", { method: "POST", body: formData });
+}
+
+// ✅ 기본 상태 업데이트
+function updateStatus() {
+  fetch("/status")
     .then((res) => res.json())
     .then((data) => {
-      if (data.updated) {
-        refreshImage();
-        lastMtime = data.mtime;
-      }
-      pollForNewImage(); // 계속 반복
-    })
-    .catch(() => {
-      setTimeout(pollForNewImage, 2000); // 에러 시 재시도
+      updateGearUI(data.gear_level);
+      updatePosition(`${data.current_position[0]}, ${data.current_position[1]}`);
+      updateThreat(data.action_queue_len > 0 ? `${data.action_queue_len}개` : "없음");
     });
 }
+setInterval(updateStatus, 1000);
 
-pollForNewImage(); // 시작
-
-// ✅ HUD 상태 업데이트 함수
-function updateHealth(hp) {
-  const healthText = document.getElementById("health-text");
-  const fill = document.getElementById("health-fill");
-  const healthItem = document.getElementById("health");
-
-  healthText.textContent = `${hp}%`;
-  fill.style.width = `${hp}%`;
-
-  if (hp >= 70) {
-    fill.style.backgroundColor = "#00ff00";
-    healthItem.classList.remove("danger");
-  } else if (hp >= 40) {
-    fill.style.backgroundColor = "#ffd700";
-    healthItem.classList.remove("danger");
-  } else {
-    fill.style.backgroundColor = "#ff3c3c";
-    healthItem.classList.add("danger");
-  }
-}
-
-function updateSignal(signal) {
-  for (let i = 1; i <= 4; i++) {
-    const bar = document.getElementById(`bar${i}`);
-    bar.style.backgroundColor = i <= signal ? "#00ff00" : "#444";
-  }
-}
-
-function updateThreat(threat) {
-  const threatElem = document.getElementById("threat");
-  threatElem.textContent = `🚨 위협 감지: ${threat}`;
-}
-
+// ✅ HUD 요소 갱신
 function updateSpeed(speed) {
-  document.getElementById("speed").textContent = `속도: ${speed} km/h`;
+  const elem = document.getElementById("speed");
+  if (elem) elem.textContent = `속도: ${speed} km/h`;
 }
 
 function updatePosition(pos) {
@@ -66,53 +125,74 @@ function updatePosition(pos) {
   if (elem) elem.textContent = `좌표: ${pos}`;
 }
 
-// ✅ 알림창
-function showAlert(message, type = "success") {
-  const alert = document.getElementById("alert-box");
-  alert.textContent = message;
-  alert.className = `alert ${type}`;
-  setTimeout(() => alert.classList.add("hidden"), 3000);
-  alert.classList.remove("hidden");
+function updateHealth(hp) {
+  const fill = document.getElementById("health-fill");
+  const text = document.getElementById("health-text");
+  const healthItem = document.getElementById("health");
+
+  fill.style.width = `${hp}%`;
+  fill.style.backgroundColor =
+    hp >= 70 ? "#00ff00" : hp >= 40 ? "#ffd700" : "#ff3c3c";
+  text.textContent = `${hp}%`;
+  healthItem.classList.toggle("danger", hp < 40);
 }
 
-// ✅ 버튼 제어 함수
-async function sendMove() {
-  const res = await fetch("/get_move");
-  const data = await res.json();
-  showAlert(`📦 이동 명령: ${data.move}`, "success");
+function updateThreat(threat) {
+  const elem = document.getElementById("threat");
+  if (elem) elem.textContent = `🚨 위협 감지: ${threat}`;
 }
 
-async function sendAction() {
-  const res = await fetch("/get_action");
-  const data = await res.json();
-  showAlert(`🎯 포탑 명령: ${data.turret}`, "success");
+function updateGearUI(gear) {
+  const elem = document.getElementById("gear-level");
+  if (elem) elem.textContent = gear;
 }
 
-async function sendBullet() {
-  const body = { x: 12, y: 0, z: 18, hit: "enemy" };
-  const res = await fetch("/update_bullet", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  showAlert("💥 탄환 발사됨!", "danger");
-}
+// ✅ 탐지된 객체 리스트 갱신
+async function updateObjectList() {
+  try {
+    const res = await fetch("/get_detected_objects");
+    const data = await res.json();
 
-async function sendDestination() {
-  const dest = document.getElementById("destInput").value;
-  const res = await fetch("/set_destination", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ destination: dest }),
-  });
-  showAlert("📍 목적지 설정됨!", "success");
-}
+    const tableBody = document.querySelector("#object-list tbody");
+    tableBody.innerHTML = ""; // 테이블 초기화
 
-// ✅ 키 입력 이벤트 → FastAPI로 전송
-// 버튼과 중복 입력 방지를 위해 form은 기본 동작 유지
-
-// ✅ 기어 시각화
-function updateGearUI(gearLevel) {
-  const gear = document.getElementById("gear-level");
-  if (gear) gear.textContent = gearLevel;
+    if (data.objects.length === 0) {
+      tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">위험요소 없음</td></tr>';
+    } else {
+      data.objects.forEach((object) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${object.className}</td>
+          <td>${object.id}</td>
+          <td>${object.threat}</td>
+          <td>${object.bbox.join(', ')}</td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+  } catch (err) {
+    console.warn("탐지된 객체 리스트 갱신 실패", err);
+  }
 }
+setInterval(updateObjectList, 1000);
+
+// ✅ 시뮬레이터 HUD 실시간 상태 갱신
+async function updateSimulatorHUD() {
+  try {
+    const res = await fetch("/get_status");
+    const data = await res.json();
+
+    updateSpeed(data.player_speed.toFixed(1));
+    updatePosition(`X=${data.player_pos.x.toFixed(1)}, Z=${data.player_pos.z.toFixed(1)}`);
+    updateHealth(data.player_health);
+  } catch (err) {
+    console.warn("시뮬레이터 HUD 갱신 실패", err);
+  }
+}
+setInterval(updateSimulatorHUD, 100);
+
+// ✅ 조준원 그리기 (crosshair) 함수 업데이트 (변경된 대로 유지)
+function drawCrosshair(isDetected, isAimed) {
+  // Crosshair 그리기 코드 계속...
+}
+setInterval(updateCrosshair, 500);  // 500ms 간격으로 업데이트

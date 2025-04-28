@@ -1,22 +1,19 @@
 from fastapi import FastAPI, File, UploadFile, Request, Form
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-import torch
 from ultralytics import YOLO
 import shutil
-import json
 import threading
 import webbrowser
-import requests
 import os
 import time
-import asyncio
 from pathlib import Path
 import cv2
 import numpy as np
+from models.detect import detect as detect_func
 
-# 📌 경로 기본 설정
+# 탭 기본 설정
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
@@ -32,6 +29,23 @@ move_command_queue = []
 action_command_queue = []
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
+current_position = (60, 27)
+
+detected_objects = []
+
+simulator_status = {
+    "player_pos": {"x": 60, "y": 10, "z": 27.23},
+    "player_speed": 0,
+    "player_health": 100,
+    "enemy_health": 100,
+    "distance": 0
+}
+
+@app.on_event("startup")
+async def clear_queues():
+    move_command_queue.clear()
+    action_command_queue.clear()
+    detected_objects.clear()
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -68,89 +82,38 @@ async def get_move():
 async def get_action():
     if action_command_queue:
         return action_command_queue.pop(0)
-    return {"turret": "", "weight": 0.0}
+    return {"turret": " ", "weight": 0.0}
 
-# ✅ YOLO 감지 + 조준선 오버레이 + 저장
 @app.post("/detect")
-async def detect(image: UploadFile = File(...)):
-    with open(TMP_PATH, "wb") as f:
-        shutil.copyfileobj(image.file, f)
+async def detect_api(image: UploadFile = File(...)):
+    return await detect_func(
+        image=image,
+        model=model,
+        crosshair_path=CROSSHAIR_PATH,
+        tmp_path=TMP_PATH,
+        detected_objects=detected_objects
+    )
 
-    results = model(str(TMP_PATH))
-    detections = results[0].boxes.data.cpu().numpy()
+@app.get("/get_detected_objects")
+async def get_detected_objects():
+    return {"objects": detected_objects}
 
-    target_classes = {0: "person", 2: "car", 7: "truck", 15: "rock"}
-    filtered_results = []
-
-    img_cv = cv2.imread(str(TMP_PATH))
-    crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
-    crosshair = cv2.resize(crosshair, (75, 75), interpolation=cv2.INTER_AREA)
-
-    for box in detections:
-        class_id = int(box[5])
-        if class_id in target_classes:
-            x1, y1, x2, y2 = map(int, box[:4])
-            confidence = float(box[4])
-            class_name = target_classes[class_id]
-
-            cx = (x1 + x2) // 2
-            cy = (y1 + y2) // 2
-            h, w = crosshair.shape[:2]
-            x_offset = max(cx - w // 2, 0)
-            y_offset = max(cy - h // 2, 0)
-
-            for c in range(3):
-                alpha_s = crosshair[:, :, 3] / 255.0
-                alpha_l = 1.0 - alpha_s
-                for i in range(h):
-                    for j in range(w):
-                        if y_offset + i < img_cv.shape[0] and x_offset + j < img_cv.shape[1]:
-                            img_cv[y_offset + i, x_offset + j, c] = (
-                                alpha_s[i, j] * crosshair[i, j, c] +
-                                alpha_l[i, j] * img_cv[y_offset + i, x_offset + j, c]
-                            )
-
-            filtered_results.append({
-                'className': class_name,
-                'bbox': [x1, y1, x2, y2],
-                'confidence': confidence
-            })
-
-    cv2.imwrite(str(TMP_PATH), img_cv)
-    return filtered_results
-
-@app.get("/check_new_frame")
-async def check_new_frame(last_mtime: float = 0):
-    if not TMP_PATH.exists():
-        return {"updated": False, "mtime": 0}
-    mtime = os.path.getmtime(TMP_PATH)
-    if mtime > last_mtime:
-        return {"updated": True, "mtime": mtime}
-    await asyncio.sleep(1.0)
-    return {"updated": False, "mtime": mtime}
-
-@app.post("/update_bullet")
-async def update_bullet(request: Request):
-    data = await request.json()
-    print(f"\ud83d\udca5 Bullet Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}")
-    return {"status": "OK", "message": "Bullet impact data received"}
-
-@app.post("/set_destination")
-async def set_destination(request: Request):
-    data = await request.json()
-    if "destination" not in data:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Missing destination data"})
-    try:
-        x, y, z = map(float, data["destination"].split(","))
-        return {"status": "OK", "destination": {"x": x, "y": y, "z": z}}
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": f"Invalid format: {str(e)}"})
-
-@app.post("/update_obstacle")
-async def update_obstacle(request: Request):
-    data = await request.json()
-    print("\ud83e\udea8 Obstacle Data:", data)
-    return {"status": "success", "message": "Obstacle data received"}
+@app.get("/video_feed")
+def video_feed():
+    def generate():
+        while True:
+            if TMP_PATH.exists():
+                frame = cv2.imread(str(TMP_PATH))
+                if frame is None:
+                    time.sleep(0.005)
+                    continue
+                _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
+                )
+            time.sleep(0.016)
+    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.get("/init")
 async def init():
@@ -163,17 +126,36 @@ async def init():
         "rdStartY": 10,
         "rdStartZ": 280
     }
-    return config
+    return JSONResponse(content=config)
 
-@app.get("/start")
-async def start():
-    return {"control": ""}
+@app.get("/get_status")
+async def get_status():
+    return simulator_status
+
+@app.post("/info")
+async def receive_simulator_info(request: Request):
+    global simulator_status
+    try:
+        data = await request.json()
+
+        simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
+        simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
+        simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
+        simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
+        simulator_status["distance"] = data.get("distance", simulator_status["distance"])
+
+        return {"status": "success", "message": "Simulator info updated"}
+
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+
 
 def open_browser():
     time.sleep(1)
     webbrowser.open("http://localhost:5000/dashboard")
 
 if __name__ == "__main__":
-    threading.Thread(target=open_browser).start()
+    if os.environ.get("RUN_MAIN") != "true":
+        threading.Thread(target=open_browser).start()
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=False)

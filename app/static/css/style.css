@@ -1,167 +1,233 @@
+/* === 기본 스타일 === */
 body {
   margin: 0;
-  background-color: #0f0f0f;
-  color: #00ff00;
   font-family: "Share Tech Mono", monospace;
+  background-color: #0a0a0a;
+  color: #00ff00;
+  padding: 1rem;
+  font-size: 1rem;
 }
 
-video {
-  width: 100%;
-  height: 70vh;
-  background-color: black;
-  border-bottom: 3px solid #00ff00;
+h3 {
+  margin: 0.5rem 0;
+  text-align: center;
+  font-size: 1.5rem;
 }
 
-.hud {
+/* === 메인 레이아웃 (탐지화면 + 리스트) === */
+.main-container {
   display: flex;
-  justify-content: space-around;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+/* === 탐지영상 + 조준선 === */
+.video-section {
+  flex: 7;
+  position: relative;
+}
+
+.video-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* 실시간 MJPEG 영상 */
+#live-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 2px solid #00ff00;
+  margin: 1rem 0;
+  box-shadow: 0 0 10px #00ff00;
+}
+
+/* ✨ 조준선 Wrapper (최종: 더 축소) */
+#crosshair-wrapper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7vw; /* ✨ 10vw → 7vw */
+  height: 7vw;
+  min-width: 56px; /* ✨ 80px → 56px */
+  min-height: 56px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ✨ 조준선 Canvas */
+#crosshair-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* ✨ 거리 표시 */
+#hud-distance {
+  position: absolute;
+  top: 65%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  font-family: monospace;
+  color: black;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px #000;
+}
+
+/* FPS 표시 */
+#fps {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #00ff00;
+  margin-top: 0.5rem;
+  font-weight: bold;
+}
+
+/* === 탐지된 객체 리스트 === */
+.object-list-section {
+  flex: 3;
+  max-height: 100%;
+  overflow-y: auto;
+  background-color: rgba(0, 255, 0, 0.05);
+  border: 2px solid #00ff00;
+  padding: 1rem;
+  box-shadow: 0 0 8px #00ff00;
+  border-radius: 10px;
+}
+
+/* 탐지 객체 테이블 */
+#object-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+#object-list th, #object-list td {
+  border: 1px solid #00ff00;
+  padding: 8px;
+  text-align: center;
+}
+
+#object-list th {
+  background-color: #111;
+  color: #00ff00;
+}
+
+#object-list tbody tr:nth-child(even) {
+  background-color: rgba(0, 255, 0, 0.05);
+}
+
+/* 반응형: 모바일 환경에서는 리스트 숨김 */
+@media (max-width: 768px) {
+  .object-list-section {
+    display: none;
+  }
+}
+
+/* === HUD 구성 === */
+.hud {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
   padding: 1rem;
   background-color: rgba(0, 255, 0, 0.05);
-  border-top: 1px solid #00ff00;
-  font-size: 1.3rem;
-  flex-wrap: wrap;
-  gap: 1rem;
+  border-top: 2px solid #00ff00;
+  border-bottom: 2px solid #00ff00;
+  margin-bottom: 1rem;
 }
 
 .hud-item {
-  padding: 0.5rem 1rem;
-  background-color: rgba(0, 255, 0, 0.07);
+  padding: 1rem;
   border: 1px solid #00ff00;
-  border-radius: 8px;
-  min-width: 220px;
+  border-radius: 10px;
   text-align: center;
-  transition: all 0.3s ease-in-out;
+  background-color: rgba(0, 255, 0, 0.07);
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+  font-size: 1rem;
 }
 
+.hud-item.danger {
+  border-color: #ff3c3c;
+  box-shadow: 0 0 10px #ff3c3c;
+}
+
+.hud-item.signal-danger {
+  border-color: #ff3c3c !important;
+  box-shadow: 0 0 12px #ff3c3c;
+}
+
+/* === 체력 게이지 === */
 .health-bar {
   width: 100%;
-  height: 16px;
-  background-color: #333;
-  border: 1px solid #555;
-  margin-top: 4px;
+  background-color: #222;
+  border: 1px solid #00ff00;
+  height: 10px;
+  margin: 0.5rem 0;
 }
 
 .health-fill {
   height: 100%;
-  width: 100%;
   background-color: #00ff00;
-  transition: width 0.3s ease;
+  width: 100%;
 }
 
+/* === 통신 신호 === */
 .signal-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: flex-end;
-  height: 20px;
-  margin-top: 4px;
-  gap: 2px;
+  gap: 4px;
+  height: 30px;
+  margin-top: 0.5rem;
 }
 
 .bar {
-  width: 6px;
-  background-color: #444;
-  transition: height 0.3s, background-color 0.3s;
-}
-
-#bar1 {
-  height: 5px;
-}
-#bar2 {
-  height: 10px;
-}
-#bar3 {
-  height: 15px;
-}
-#bar4 {
-  height: 20px;
-}
-
-.hud-item.danger {
-  color: #ff3c3c;
-  border-color: #ff3c3c;
-  animation: blink 1s infinite;
-}
-
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
-.control-panel {
-  display: flex;
-  justify-content: space-around;
-  background-color: rgba(0, 255, 0, 0.03);
-  padding: 1rem;
-  border-top: 1px solid #00ff00;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.control-panel button {
-  background-color: #111;
-  color: #00ff00;
+  width: 10px;
+  background-color: #222;
   border: 1px solid #00ff00;
-  padding: 0.5rem 1rem;
-  font-size: 1rem;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s;
 }
 
-.control-panel button:hover {
-  background-color: #00ff00;
-  color: #111;
-}
+.bar:nth-child(1) { height: 8px; }
+.bar:nth-child(2) { height: 14px; }
+.bar:nth-child(3) { height: 22px; }
+.bar:nth-child(4) { height: 30px; }
 
-#destInput {
-  background: black;
-  border: 1px solid #00ff00;
-  color: #00ff00;
-  padding: 0.3rem;
-  width: 150px;
-}
-
-.alert {
+/* === 로딩 화면 === */
+.loading-overlay {
   position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: rgba(0, 255, 0, 0.1);
-  border: 1px solid #00ff00;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000;
   color: #00ff00;
   font-family: "Share Tech Mono", monospace;
-  padding: 10px 20px;
-  font-size: 1rem;
-  border-radius: 6px;
-  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  z-index: 9999;
   transition: opacity 0.4s ease;
 }
 
-.alert.hidden {
-  opacity: 0;
-  pointer-events: none;
+/* === 로딩 애니메이션 === */
+.loader {
+  border: 5px solid #333;
+  border-top: 5px solid #00ff00;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
 }
 
-.alert.success {
-  border-color: #00ff00;
-  color: #00ff00;
-}
-.alert.warning {
-  border-color: #ffd700;
-  color: #ffd700;
-}
-.alert.danger {
-  border-color: #ff3c3c;
-  color: #ff3c3c;
-}
-.video-wrapper img {
-  width: 100%;
-  height: 70vh;
-  object-fit: cover;
-  border-bottom: 3px solid #00ff00;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
