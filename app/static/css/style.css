@@ -67,14 +67,17 @@ h3 {
 /* ✨ 거리 표시 */
 #hud-distance {
   position: absolute;
-  top: 65%;
+  bottom: 25%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 20px;
+  /* crosshair-wrapper width:7vw 기준, 약 20% 비율 */
+  font-size: 0.7vw;
   font-family: monospace;
-  color: black;
+  color: #00ff00; /* 초록색 */
   font-weight: bold;
-  text-shadow: 1px 1px 2px #000;
+  text-shadow: 0 0 4px #000;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* FPS 표시 */
@@ -106,7 +109,8 @@ h3 {
   font-size: 0.9rem;
 }
 
-#object-list th, #object-list td {
+#object-list th,
+#object-list td {
   border: 1px solid #00ff00;
   padding: 8px;
   text-align: center;
@@ -192,10 +196,18 @@ h3 {
   transition: background-color 0.3s;
 }
 
-.bar:nth-child(1) { height: 8px; }
-.bar:nth-child(2) { height: 14px; }
-.bar:nth-child(3) { height: 22px; }
-.bar:nth-child(4) { height: 30px; }
+.bar:nth-child(1) {
+  height: 8px;
+}
+.bar:nth-child(2) {
+  height: 14px;
+}
+.bar:nth-child(3) {
+  height: 22px;
+}
+.bar:nth-child(4) {
+  height: 30px;
+}
 
 /* === 로딩 화면 === */
 .loading-overlay {
