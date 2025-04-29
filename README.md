@@ -28,6 +28,7 @@ code . --reuse-window
 ├── package.json  # Node.js 프로젝트 설정 및 의존성 정의 파일
 ├── pr_curve.png
 ├── README.md  # 프로젝트 소개 및 사용법 문서
+├── record.py
 ├── requirements.txt  # Python 의존성 정의 파일
 ├── roc_curve.png
 └── 요구사항정의서.md
