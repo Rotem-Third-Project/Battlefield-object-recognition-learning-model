@@ -45,14 +45,14 @@ h3 {
   box-shadow: 0 0 10px #00ff00;
 }
 
-/* ✨ 조준선 Wrapper (최종: 더 축소) */
+/* ✨ 조준선 Wrapper */
 #crosshair-wrapper {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 7vw; /* ✨ 10vw → 7vw */
+  width: 7vw;
   height: 7vw;
-  min-width: 56px; /* ✨ 80px → 56px */
+  min-width: 56px;
   min-height: 56px;
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -67,14 +67,16 @@ h3 {
 /* ✨ 거리 표시 */
 #hud-distance {
   position: absolute;
-  top: 65%;
+  bottom: 25%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 20px;
+  font-size: 0.7vw;
   font-family: monospace;
-  color: black;
+  color: #00ff00;
   font-weight: bold;
-  text-shadow: 1px 1px 2px #000;
+  text-shadow: 0 0 4px #000;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* FPS 표시 */
@@ -106,7 +108,8 @@ h3 {
   font-size: 0.9rem;
 }
 
-#object-list th, #object-list td {
+#object-list th,
+#object-list td {
   border: 1px solid #00ff00;
   padding: 8px;
   text-align: center;
@@ -192,42 +195,73 @@ h3 {
   transition: background-color 0.3s;
 }
 
-.bar:nth-child(1) { height: 8px; }
-.bar:nth-child(2) { height: 14px; }
-.bar:nth-child(3) { height: 22px; }
-.bar:nth-child(4) { height: 30px; }
+.bar:nth-child(1) {
+  height: 8px;
+}
+.bar:nth-child(2) {
+  height: 14px;
+}
+.bar:nth-child(3) {
+  height: 22px;
+}
+.bar:nth-child(4) {
+  height: 30px;
+}
 
-/* === 로딩 화면 === */
-.loading-overlay {
+/* === 위험 등급 텍스트 === */
+.threat-level-1 {
+  color: #28a745;
+  font-weight: bold;
+}
+.threat-level-2 {
+  color: #ff9800;
+  font-weight: bold;
+}
+.threat-level-3 {
+  color: #dc3545;
+  font-weight: bold;
+}
+.threat-normal {
+  color: gray;
+}
+.threat-none {
+  color: #666;
+}
+
+/* === HUD 배경 위험 등급 === */
+.danger.threat-level-1 {
+  background-color: rgba(40, 167, 69, 0.1);
+}
+.danger.threat-level-2 {
+  background-color: rgba(255, 152, 0, 0.1);
+}
+.danger.threat-level-3 {
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+/* === 알림창 (추후 추가) === */
+.alert {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: #000;
+  bottom: 20px;
+  right: 20px;
+  background: #222;
   color: #00ff00;
-  font-family: "Share Tech Mono", monospace;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  z-index: 9999;
-  transition: opacity 0.4s ease;
+  padding: 10px 20px;
+  border: 1px solid #00ff00;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.9rem;
+  box-shadow: 0 0 8px #00ff00;
+  transition: all 0.3s;
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* === 로딩 애니메이션 === */
-.loader {
-  border: 5px solid #333;
-  border-top: 5px solid #00ff00;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 1s linear infinite;
-  margin-bottom: 1rem;
+.alert.show {
+  opacity: 1;
+  pointer-events: all;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.hidden {
+  display: none;
 }
