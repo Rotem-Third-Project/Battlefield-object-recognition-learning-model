@@ -11,12 +11,12 @@ from sklearn.utils import class_weight
 import numpy as np
 
 # 설정
-data_dir = r"C:\Users\acorn\OneDrive\Desktop\real_efficientnet_dataset"  # 균형 조정 후: efficientnet_dataset_balanced
+data_dir = r"C:\Users\acorn\OneDrive\Desktop\real_efficientnet_dataset"
 img_size = (224, 224)
 batch_size = 32
 num_classes = 3
 epochs = 25
-learning_rate = 1e-4
+learning_rate = 1e-3  # 학습률 증가
 
 # 클래스별 이미지 수 확인
 print("Class distribution:")
@@ -29,13 +29,18 @@ for cls in os.listdir(data_dir):
 # 데이터 증강 및 로드
 train_datagen = ImageDataGenerator(
     rescale=1./255,
-    rotation_range=20,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    shear_range=0.2,
-    zoom_range=0.2,
+    rotation_range=10,  # 증강 완화
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    shear_range=0.1,
+    zoom_range=0.1,
     horizontal_flip=True,
     fill_mode="nearest",
+    validation_split=0.2
+)
+
+val_datagen = ImageDataGenerator(
+    rescale=1./255,
     validation_split=0.2
 )
 
@@ -48,7 +53,7 @@ train_generator = train_datagen.flow_from_directory(
     shuffle=True
 )
 
-validation_generator = train_datagen.flow_from_directory(
+validation_generator = val_datagen.flow_from_directory(
     data_dir,
     target_size=img_size,
     batch_size=batch_size,
@@ -58,6 +63,16 @@ validation_generator = train_datagen.flow_from_directory(
 )
 
 print(f"Found {train_generator.samples} training images and {validation_generator.samples} validation images")
+
+# 데이터 확인
+print("Class indices:", train_generator.class_indices)
+batch = next(train_generator)
+images, labels = batch
+print("Image value range:", images.min(), images.max())
+for i in range(5):
+    plt.imshow(images[i])
+    plt.title(f"Label: {labels[i]}")
+    plt.show()
 
 # steps_per_epoch 및 validation_steps 조정
 steps_per_epoch = train_generator.samples // batch_size
@@ -78,12 +93,14 @@ print(f"Class weights: {class_weight_dict}")
 
 # EfficientNetB0 모델 빌드
 base_model = EfficientNetB0(weights="imagenet", include_top=False, input_shape=img_size + (3,))
-base_model.trainable = False
+base_model.trainable = True
+for layer in base_model.layers[:100]:
+    layer.trainable = False
 
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 x = Dense(512, activation="relu")(x)
-x = Dropout(0.5)(x)
+x = Dropout(0.3)(x)  # Dropout 비율 감소
 outputs = Dense(num_classes, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=outputs)
@@ -115,7 +132,7 @@ history = model.fit(
 
 # Fine-tuning
 base_model.trainable = True
-for layer in base_model.layers[:100]:
+for layer in base_model.layers[:50]:  # 더 적은 레이어 고정
     layer.trainable = False
 
 model.compile(optimizer=Adam(learning_rate=learning_rate / 10),
