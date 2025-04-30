@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="/static/js/turret_control.js"></script>
+    <title>공격 메치 & 포택 웹</title>
+    <style>
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 30px;
+        height: 30px;
+        border: 2px solid red;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10;
+      }
+      #live-image {
+        display: block;
+        max-width: 100%;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 감지 화면 -->
+    <div>
+      <img id="live-image" src="/video_feed" alt="감지 화면" />
+      <div id="crosshair"></div>
+    </div>
+
+    <!-- 포택 제어 -->
+    <div>
+      <h3>포택 진행</h3>
+      <label
+        >Weight (0.1~1.0):
+        <input
+          id="weight"
+          type="number"
+          min="0.1"
+          max="1.0"
+          step="0.1"
+          value="1.0"
+      /></label>
+      <div>
+        <button onclick="sendTurret('Q')">Q - 왼</button>
+        <button onclick="sendTurret('E')">E - 우</button>
+        <button onclick="sendTurret('R')">R - 위</button>
+        <button onclick="sendTurret('F')">F - 하</button>
+        <button onclick="sendTurret('FIRE')">패시</button>
+      </div>
+    </div>
+
+    <!-- 로그 -->
+    <div>
+      <h3>로그</h3>
+      <textarea id="log-box" rows="10" cols="50" readonly></textarea>
+    </div>
+
+    <script>
+      function sendTurret(command) {
+        const weight = parseFloat(document.getElementById("weight").value);
+        fetch("/send_action", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ turret: command, weight: weight }),
+        });
+      }
+
+      async function fetchLogs() {
+        try {
+          const res = await fetch("/get_logs");
+          const data = await res.json();
+          const box = document.getElementById("log-box");
+          box.value = data.logs.join("\n");
+          box.scrollTop = box.scrollHeight;
+        } catch {}
+      }
+
+      async function updateCrosshairPitch() {
+        try {
+          const res = await fetch("/get_status");
+          const data = await res.json();
+          const pitch = data.turret_pitch || 0;
+          const offsetY = pitch * 3; // 피크셀 비력계수
+          const crosshair = document.getElementById("crosshair");
+          if (crosshair) {
+            crosshair.style.top = `calc(50% + ${offsetY}px)`;
+          }
+        } catch (err) {
+          console.warn("조준값 수정 실패:", err);
+        }
+      }
+
+      setInterval(fetchLogs, 1000);
+      setInterval(updateCrosshairPitch, 1000);
+    </script>
+  </body>
+</html>
