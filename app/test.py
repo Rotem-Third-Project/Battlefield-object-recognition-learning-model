@@ -98,9 +98,10 @@ def detect():
     detections = results[0].boxes.data.cpu().numpy()
 
     # 3) Deep SORT 입력 리스트 생성 (픽셀 좌표 그대로)
-    target_classes = {0: "Enemy", 1: "car", 7: "truck", 15: "rock"}
+    target_classes = {0: "Enemy", 1: "Enemy-Front", 2: "Enemy-Rear", 3: "Enemy-Side"}
+    target_candidates = []  # 후보 객체들 (거리 기준)
     detection_list = []
-    scale = 3.5  # 이미지 확대 비율
+    scale = 5.5  # 이미지 확대 비율
     for box in detections:
         x1, y1, x2, y2, conf, cid = box
         w = x2 - x1
@@ -109,6 +110,7 @@ def detect():
         print(
             f"[DEEPSORT INPUT] x1={x1:.1f}, y1={y1:.1f}, x2={x2:.1f}, y2={y2:.1f}, w={x2-x1:.1f}, h={y2-y1:.1f}"
         )
+
         if cid in target_classes:
             # 🔹 1. 박스 확장
             x1, y1, x2, y2 = map(float, (x1, y1, x2, y2))
@@ -131,6 +133,8 @@ def detect():
                     target_classes[cid],
                 )
             )
+            dist = abs(cx - BARREL_X)
+            target_candidates.append((dist, cx, cy, box))
 
     # 4) 트래킹 업데이트
     tracks = tracker.update_tracks(detection_list, frame=img)
@@ -204,6 +208,30 @@ def detect():
             # YOLO 박스 좌표 출력
             print(f"YOLO 박스 {idx}: ({x1}, {y1}, {x2}, {y2})")
 
+    if target_candidates:
+        # 후보들 중 기준(중앙)과의 거리가 가장 가까운 객체를 선택
+        target_candidates.sort(key=lambda x: x[0])
+        _, cx, cy, candidate_box = target_candidates[0]
+
+        dx = cx - BARREL_X
+        dy = cy - BARREL_Y
+
+        weight_x = compute_turret_weight_X(dx, TOLERANCE)
+        weight_y = compute_turret_weight_Y(dy, TOLERANCE)
+
+        if dx > TOLERANCE:
+            action_command.append({"turret": "E", "weight": weight_x})
+        elif dx < -TOLERANCE:
+            action_command.append({"turret": "Q", "weight": weight_x})
+
+        if dy > TOLERANCE:
+            action_command.append({"turret": "F", "weight": weight_y})
+        elif dy < -TOLERANCE:
+            action_command.append({"turret": "R", "weight": weight_y})
+
+        if abs(dx) <= TOLERANCE and abs(dy) <= TOLERANCE:
+            action_command.append({"turret": " ", "weight": 0.0})
+
     # DeepSort 트랙박스 시각화 및 좌표 출력
     for track in tracks:
         if not track.is_confirmed():
@@ -250,11 +278,24 @@ def detect():
             name = target_classes[cid]
             tid = track_to_det.get(idx)
             class_name = f"{name}-{tid}" if tid is not None else name
+
+            # 🔸 class_id에 따른 색상 설정
+            if cid in (0, 1):
+                color = "#FF0000"  # Enemy, Enemy-Front: red
+            elif cid == 2:
+                color = "#FFFF00"  # Enemy-Side: yellow
+            elif cid == 3:
+                color = "#000800"  # Enemy-Rear: Green
+            else:
+                color = "#000000"  # 기본값 (예외 처리용)
             result_json.append(
                 {
                     "className": class_name,
                     "bbox": [float(c) for c in box[:4]],
                     "confidence": conf,
+                    "color": color,
+                    "filled": True,
+                    "updateBoxWhileMoving": False,
                 }
             )
 
