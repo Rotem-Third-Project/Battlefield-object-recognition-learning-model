@@ -138,7 +138,7 @@ async function updateCrosshair() {
     let bestDist2 = Infinity;
 
     for (const obj of objects) {
-      if (obj.className !== "enemy") continue;
+      if (!obj.className.toLowerCase().includes("enemy")) continue;
 
       // 원본 좌표를 화면 표시 좌표로 변환
       const [x1Orig, y1Orig, x2Orig, y2Orig] = obj.bbox;
@@ -155,6 +155,22 @@ async function updateCrosshair() {
       const dx0 = bx - cx0;
       const dy0 = by - cy0;
       const d20 = dx0 * dx0 + dy0 * dy0;
+
+      // 디버그 로그
+      console.log("----");
+      console.log(
+        "bbox:",
+        obj.bbox.map((v) => v.toFixed(1))
+      );
+      console.log("bbox center:", bx.toFixed(1), by.toFixed(1));
+      console.log("aim center:", cx0.toFixed(1), cy0.toFixed(1));
+      console.log(
+        "distance² from center:",
+        d20.toFixed(1),
+        "vs R0²:",
+        (R0 * R0).toFixed(1)
+      );
+      console.log("centerInCircle:", d20 <= R0 * R0);
 
       // 1) 바운딩 박스의 중심이 조준원 안에 있는지 확인
       const centerInCircle = d20 <= R0 * R0;
