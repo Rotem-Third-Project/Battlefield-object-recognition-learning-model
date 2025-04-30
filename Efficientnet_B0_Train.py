@@ -11,7 +11,7 @@ from sklearn.utils import class_weight
 import numpy as np
 
 # 설정
-data_dir = r"C:\Users\acorn\OneDrive\Desktop\efficientnet_dataset"  # 균형 조정 후: efficientnet_dataset_balanced
+data_dir = r"C:\Users\acorn\OneDrive\Desktop\real_efficientnet_dataset"  # 균형 조정 후: efficientnet_dataset_balanced
 img_size = (224, 224)
 batch_size = 32
 num_classes = 3
@@ -138,8 +138,8 @@ history_fine = model.fit(
 )
 
 # 모델 저장
-model.save(r"C:\Users\acorn\OneDrive\Desktop\efficientnetb0_model.h5")
-print("Model saved to efficientnetb0_model.h5")
+model.save(r"C:\Users\acorn\OneDrive\Desktop\real_efficientnetb0_model.h5")
+print("Model saved to real_efficientnetb0_model.h5")
 
 # 학습 결과 시각화
 acc = history.history["accuracy"] + history_fine.history["accuracy"]
@@ -160,5 +160,5 @@ plt.plot(val_loss, label="Validation Loss")
 plt.title("Training and Validation Loss")
 plt.legend()
 
-plt.savefig(r"C:\Users\acorn\OneDrive\Desktop\training_plot.png")
+plt.savefig(r"C:\Users\acorn\OneDrive\Desktop\real_training_plot.png")
 plt.show()
