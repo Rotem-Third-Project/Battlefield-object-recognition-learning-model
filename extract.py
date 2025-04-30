@@ -1,7 +1,10 @@
 import cv2
 import os
-
+import sys
 print(cv2.__version__)
+# ✅ 콘솔 인코딩을 UTF-8로 설정
+sys.stdout.reconfigure(encoding='utf-8')
+
 
 # ✅ 영상 폴더 경로
 folder_path = r'C:\Users\acorn\Videos'
@@ -46,7 +49,7 @@ for file_name in os.listdir(folder_path):
             break
 
         if count % interval == 0:
-            filename = os.path.join(output_dir, f"Rear_{global_frame_count:04d}.jpg")
+            filename = os.path.join(output_dir, f"Front_{global_frame_count:04d}.jpg")
             cv2.imwrite(filename, image)
             print(f"Saved: {filename}")
             global_frame_count += 1
