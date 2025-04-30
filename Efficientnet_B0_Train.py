@@ -6,6 +6,7 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.regularizers import l2
 import matplotlib.pyplot as plt
 from sklearn.utils import class_weight
 import numpy as np
@@ -16,7 +17,7 @@ img_size = (224, 224)
 batch_size = 32
 num_classes = 3
 epochs = 25
-learning_rate = 1e-3  # 학습률 증가
+learning_rate = 1e-4
 
 # 클래스별 이미지 수 확인
 print("Class distribution:")
@@ -29,11 +30,11 @@ for cls in os.listdir(data_dir):
 # 데이터 증강 및 로드
 train_datagen = ImageDataGenerator(
     rescale=1./255,
-    rotation_range=10,  # 증강 완화
-    width_shift_range=0.1,
-    height_shift_range=0.1,
-    shear_range=0.1,
-    zoom_range=0.1,
+    rotation_range=30,
+    width_shift_range=0.3,
+    height_shift_range=0.3,
+    shear_range=0.3,
+    zoom_range=0.3,
     horizontal_flip=True,
     fill_mode="nearest",
     validation_split=0.2
@@ -99,8 +100,8 @@ for layer in base_model.layers[:100]:
 
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
-x = Dense(512, activation="relu")(x)
-x = Dropout(0.3)(x)  # Dropout 비율 감소
+x = Dense(512, activation="relu", kernel_regularizer=l2(0.01))(x)
+x = Dropout(0.5)(x)
 outputs = Dense(num_classes, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=outputs)
@@ -112,7 +113,7 @@ model.compile(optimizer=Adam(learning_rate=learning_rate),
 
 # 콜백 설정
 callbacks = [
-    EarlyStopping(patience=5, restore_best_weights=True),
+    EarlyStopping(monitor="val_accuracy", patience=4, mode="max", restore_best_weights=True),
     ReduceLROnPlateau(factor=0.5, patience=3, min_lr=1e-6)
 ]
 
@@ -130,9 +131,12 @@ history = model.fit(
     verbose=1
 )
 
+# Fine-tuning 전 메시지
+print(f"Initial training completed at epoch {history.epoch[-1] + 1}. Starting fine-tuning...")
+
 # Fine-tuning
 base_model.trainable = True
-for layer in base_model.layers[:50]:  # 더 적은 레이어 고정
+for layer in base_model.layers[:50]:
     layer.trainable = False
 
 model.compile(optimizer=Adam(learning_rate=learning_rate / 10),
@@ -144,8 +148,8 @@ train_generator.reset()
 validation_generator.reset()
 history_fine = model.fit(
     train_generator,
-    epochs=epochs + fine_tune_epochs,
-    initial_epoch=history.epoch[-1] + 1,
+    epochs=fine_tune_epochs,
+    initial_epoch=0,
     validation_data=validation_generator,
     steps_per_epoch=steps_per_epoch,
     validation_steps=validation_steps,
