@@ -55,3 +55,34 @@ for label_file in os.listdir(orig_label_dir):
         else:
             # 라벨이 없는 경우, 복사하지 않고 로그 출력
             print(f"Skipped empty label file: {orig_label_path}")
+
+# import os
+
+# # 라벨 디렉토리 경로
+# label_dir = r"C:\Users\acorn\OneDrive\Desktop\EfficientnetData/train/labels"
+
+# # 디렉토리 내 모든 .txt 파일 순회
+# for label_file in os.listdir(label_dir):
+#     if label_file.endswith(".txt"):
+#         label_path = os.path.join(label_dir, label_file)
+        
+#         # 라벨 파일 읽기
+#         with open(label_path, "r") as f:
+#             lines = f.readlines()
+        
+#         # 클래스 ID를 0에서 80으로 변경
+#         new_lines = []
+#         for line in lines:
+#             parts = line.strip().split()
+#             if parts:  # 비어 있지 않은 라인만 처리
+#                 parts[0] = "80"  # 클래스 ID를 80으로 변경
+#                 new_lines.append(" ".join(parts))
+        
+#         # 수정된 내용으로 원본 파일 덮어쓰기
+#         if new_lines:  # 유효한 라벨이 있는 경우에만 저장
+#             with open(label_path, "w") as f:
+#                 for line in new_lines:
+#                     f.write(line + "\n")
+#             print(f"Updated label file: {label_path}")
+#         else:
+#             print(f"Skipped empty label file: {label_path}")
