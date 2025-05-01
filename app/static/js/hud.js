@@ -3,8 +3,7 @@ const threatInfo = {
   "LEVEL 3": { priority: 3, className: "threat-level-3" },
   "LEVEL 2": { priority: 2, className: "threat-level-2" },
   "LEVEL 1": { priority: 1, className: "threat-level-1" },
-  Normal: { priority: 0, className: "threat-normal" },
-  없음: { priority: -1, className: "threat-none" },
+  none: { priority: 0, className: "threat-none" },
 };
 
 // ✅ 상태 변수
@@ -65,6 +64,7 @@ function updateConnectionScore() {
 // ✅ 통신 신호 바 상태 업데이트
 function updateSignalBars(score) {
   const bars = document.querySelectorAll(".signal-bar .bar");
+  const commElem = document.getElementById("comm");
 
   let activeCount = 0;
   if (score >= 0.875) activeCount = 4;
@@ -75,6 +75,14 @@ function updateSignalBars(score) {
   bars.forEach((bar, idx) => {
     bar.style.backgroundColor = idx < activeCount ? "#00ff00" : "#222";
   });
+  // ✅ score가 낮으면 danger 클래스 추가
+  if (commElem) {
+    if (score < 0.125) {
+      commElem.classList.add("signal-danger");
+    } else {
+      commElem.classList.remove("signal-danger");
+    }
+  }
 }
 
 // ✅ HUD: 속도·위치·체력 등 정보 표시
@@ -123,11 +131,11 @@ async function updateObjects() {
       return;
     }
 
-    let highestThreat = "Normal",
+    let highestThreat = "none",
       highestPriority = 0;
 
     data.objects.forEach((obj) => {
-      const threatClass = (threatInfo[obj.threat] || threatInfo["Normal"])
+      const threatClass = (threatInfo[obj.threat] || threatInfo["none"])
         .className;
       const x = Math.round((obj.bbox[0] + obj.bbox[2]) / 2);
       const y = Math.round((obj.bbox[1] + obj.bbox[3]) / 2);
@@ -141,7 +149,7 @@ async function updateObjects() {
       `;
       objectListBody.appendChild(row);
 
-      const threatPriority = (threatInfo[obj.threat] || threatInfo["Normal"])
+      const threatPriority = (threatInfo[obj.threat] || threatInfo["none"])
         .priority;
       if (threatPriority > highestPriority) {
         highestPriority = threatPriority;
@@ -157,18 +165,26 @@ async function updateObjects() {
 
 function updateThreatDisplay(threatText) {
   const threatDiv = document.getElementById("threat");
-  const threatClass = (threatInfo[threatText] || threatInfo["Normal"])
-    .className;
+  const threatClass = (threatInfo[threatText] || threatInfo["none"]).className;
 
+  // ✅ 텍스트 및 스타일 클래스 적용
   threatDiv.innerHTML = `🚨 위협 감지: <span class="${threatClass}">${threatText}</span>`;
   threatDiv.classList.remove(
     "threat-level-1",
     "threat-level-2",
     "threat-level-3",
-    "threat-normal",
     "threat-none"
   );
   threatDiv.classList.add(threatClass);
+
+  // ✅ danger/safe 테두리 클래스도 추가/제거
+  if (threatClass === "threat-none") {
+    threatDiv.classList.remove("danger");
+    threatDiv.classList.add("none");
+  } else {
+    threatDiv.classList.remove("none");
+    threatDiv.classList.add("danger");
+  }
 }
 
 // ✅ 주기적 루프

@@ -159,8 +159,12 @@ h3 {
 }
 
 .hud-item.signal-danger {
-  border-color: #ff3c3c !important;
+  border-color: #ff3c3c;
   box-shadow: 0 0 12px #ff3c3c;
+}
+
+.hud-item.none {
+  border-color: #00ff00;
 }
 
 /* === 체력 게이지 === */
@@ -221,11 +225,8 @@ h3 {
   color: #dc3545;
   font-weight: bold;
 }
-.threat-normal {
-  color: gray;
-}
 .threat-none {
-  color: #666;
+  color: gray;
 }
 
 /* === HUD 배경 위험 등급 === */
