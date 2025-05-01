@@ -20,7 +20,7 @@ import numpy as np
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-EFFICIENTNET_MODEL_PATH = BASE_DIR / "Efficientnet_weights" / "models" / "30000Efficient_weight.h5"  # EfficientNet 모델 경로
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # EfficientNet 모델 경로
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
