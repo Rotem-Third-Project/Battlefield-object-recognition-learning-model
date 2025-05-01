@@ -3,16 +3,18 @@ from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from ultralytics import YOLO
+from pathlib import Path
+from models.detect import detect as detect_func
+from datetime import datetime
+
 import tensorflow as tf
 import shutil
 import threading
 import webbrowser
 import os
 import time
-from pathlib import Path
 import cv2
 import numpy as np
-from models.detect import detect as detect_func
 
 # 탭 기본 설정
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,6 +33,9 @@ efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH)
 
 move_command_queue = []
 action_command_queue = []
+bullet_logs = []
+turret_pitch_angle = 0.0  # 초기 pitch (단위: degree)
+
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (60, 27)
@@ -45,15 +50,17 @@ simulator_status = {
     "distance": 0
 }
 
-@app.on_event("startup")
-async def clear_queues():
-    move_command_queue.clear()
-    action_command_queue.clear()
-    detected_objects.clear()
+@app.get("/init_status")
+async def init_status():
+    return {"turret_pitch": turret_pitch_angle}
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/turret_control_dashboard", response_class=HTMLResponse)
+async def turret_dashboard(request: Request):
+    return templates.TemplateResponse("turret_control_dashboard.html", {"request": request})
 
 @app.post("/input_key")
 async def input_key(key: str = Form(...)):
@@ -73,8 +80,23 @@ async def send_move(move: str = Form(...), weight: float = Form(...)):
 
 @app.post("/send_action")
 async def send_action(turret: str = Form(...), weight: float = Form(...)):
+    global turret_pitch_angle
+    coef = 5.0
+
+    if turret == "R":
+        turret_pitch_angle += weight * coef
+    elif turret == "F":
+        turret_pitch_angle -= weight * coef
+
+    turret_pitch_angle = max(-30.0, min(30.0, turret_pitch_angle))
+
+    # 로그에 조준각 포함 기록
+    action_log = f"[CMD] {turret} {weight:.2f} → pitch={turret_pitch_angle:.2f}°"
+    print(action_log)
+    bullet_logs.append(action_log)
+
     action_command_queue.append({"turret": turret, "weight": weight})
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return JSONResponse(content={"status": "OK", "message": "Command queued"})
 
 @app.get("/get_move")
 async def get_move():
@@ -135,7 +157,28 @@ async def init():
 
 @app.get("/get_status")
 async def get_status():
+    simulator_status["turret_pitch"] = turret_pitch_angle
     return simulator_status
+
+@app.post("/update_bullet")
+async def update_bullet(request: Request):
+    data = await request.json()
+    if not data:
+        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Invalid request data"})
+    
+    impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # 시간.밀리초까지
+    log_msg = (
+        f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, "
+        f"Z={data.get('z')}, Target={data.get('hit')}"
+    )
+    print(log_msg)
+    bullet_logs.append(log_msg)
+
+    return {"status": "OK", "message": "Bullet impact data received"}
+
+@app.get("/get_logs")
+async def get_logs():
+    return {"logs": bullet_logs[-20:]}
 
 @app.post("/info")
 async def receive_simulator_info(request: Request):
