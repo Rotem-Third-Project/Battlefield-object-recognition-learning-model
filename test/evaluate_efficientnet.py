@@ -10,8 +10,8 @@ from pathlib import Path
 
 # 경로 설정
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = Path(r"C:\Users\acorn\OneDrive\Desktop\MyWork\Battlefield-object-recognition-learning-model\app\models\efficientnetb0_model.h5")
-DATA_DIR = r"C:\Users\acorn\OneDrive\Desktop\efficientnet_dataset"  # 클래스 균형 조정 후 데이터 경로
+MODEL_PATH = Path(r"C:\Users\acorn\OneDrive\Desktop\MyWork\Battlefield-object-recognition-learning-model\app\models\Efficientnet_weights\30000Efficient_weight.h5")
+DATA_DIR = r"C:\Users\acorn\OneDrive\Desktop\real_efficientnet_dataset"  
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
 
