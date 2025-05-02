@@ -49,7 +49,6 @@
     <!-- 🖼️ 메인 컨테이너 -->
     <div class="main-container">
       <div class="video-section">
-        <h3>탐지 영상</h3>
         <div class="video-wrapper">
           <!-- ✅ src 직접 연결 -->
           <img id="live-image" src="/video_feed" alt="탐지 결과" />
@@ -97,19 +96,17 @@
       <div class="hud-item" id="threat">🚨 위협 감지: 없음</div>
       <div class="hud-item" id="comm">
         <div>📡 통신 신호</div>
-        <div class="signal-bar">
+        <div class="signal-bar" style="position: relative">
           <div class="bar"></div>
           <div class="bar"></div>
           <div class="bar"></div>
           <div class="bar"></div>
+          <div id="signal-error-icon">✖</div>
         </div>
       </div>
       <div class="hud-item" id="gear">
         🔧 기어: <span id="gear-level">2</span>
       </div>
     </div>
-
-    <!-- ⚠️ 알림창 -->
-    <div id="alert-box" class="alert hidden">알림창</div>
   </body>
 </html>
