@@ -57,6 +57,11 @@
 #             print(f"Skipped empty label file: {orig_label_path}")
 
 
+
+
+
+
+
 # 라벨 파일의 클래스 ID를 0에서 80으로 변경하는 코드
 
 
@@ -134,6 +139,7 @@
 #             valid_label_files.append(label_file)
 #             break
 
+
 # # 랜덤으로 5000개 파일 선택
 # random.seed(42)  # 재현 가능성을 위해 시드 설정
 # selected_label_files = random.sample(valid_label_files, min(5000, len(valid_label_files)))
@@ -174,6 +180,14 @@
 
 # print(f"총 처리된 파일 수: {len(selected_label_files)}")
 
+
+
+
+
+
+
+
+# 라벨 파일과 이미지 파일의 쌍을 비교하여 일치하지 않는 파일 찾기
 import os
 
 # 원본 데이터 디렉토리 경로

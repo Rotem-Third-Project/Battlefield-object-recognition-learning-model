@@ -28,7 +28,7 @@ app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 # 모델 로드
-yolo_model = YOLO(BASE_DIR / "models" / "best.pt")
+yolo_model = YOLO(BASE_DIR / "yolo_weights" / "models" / "best.pt")
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH)
 
 move_command_queue = []
