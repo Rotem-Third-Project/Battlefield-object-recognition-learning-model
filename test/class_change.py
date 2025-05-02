@@ -60,36 +60,36 @@
 # 라벨 파일의 클래스 ID를 0에서 80으로 변경하는 코드
 
 
-import os
+# import os
 
-# 라벨 디렉토리 경로
-label_dir = r"C:\Users\acorn\OneDrive\Desktop\5000tank/labels"
+# # 라벨 디렉토리 경로
+# label_dir = r"C:\Users\acorn\OneDrive\Desktop\5000tank/labels"
 
-# 디렉토리 내 모든 .txt 파일 순회
-for label_file in os.listdir(label_dir):
-    if label_file.endswith(".txt"):
-        label_path = os.path.join(label_dir, label_file)
+# # 디렉토리 내 모든 .txt 파일 순회
+# for label_file in os.listdir(label_dir):
+#     if label_file.endswith(".txt"):
+#         label_path = os.path.join(label_dir, label_file)
         
-        # 라벨 파일 읽기
-        with open(label_path, "r") as f:
-            lines = f.readlines()
+#         # 라벨 파일 읽기
+#         with open(label_path, "r") as f:
+#             lines = f.readlines()
         
-        # 클래스 ID를 0에서 80으로 변경
-        new_lines = []
-        for line in lines:
-            parts = line.strip().split()
-            if parts:  # 비어 있지 않은 라인만 처리
-                parts[0] = "0"  # 클래스 ID를 80으로 변경
-                new_lines.append(" ".join(parts))
+#         # 클래스 ID를 0에서 80으로 변경
+#         new_lines = []
+#         for line in lines:
+#             parts = line.strip().split()
+#             if parts:  # 비어 있지 않은 라인만 처리
+#                 parts[0] = "0"  # 클래스 ID를 80으로 변경
+#                 new_lines.append(" ".join(parts))
         
-        # 수정된 내용으로 원본 파일 덮어쓰기
-        if new_lines:  # 유효한 라벨이 있는 경우에만 저장
-            with open(label_path, "w") as f:
-                for line in new_lines:
-                    f.write(line + "\n")
-            print(f"Updated label file: {label_path}")
-        else:
-            print(f"Skipped empty label file: {label_path}")
+#         # 수정된 내용으로 원본 파일 덮어쓰기
+#         if new_lines:  # 유효한 라벨이 있는 경우에만 저장
+#             with open(label_path, "w") as f:
+#                 for line in new_lines:
+#                     f.write(line + "\n")
+#             print(f"Updated label file: {label_path}")
+#         else:
+#             print(f"Skipped empty label file: {label_path}")
 
 
 
@@ -173,3 +173,43 @@ for label_file in os.listdir(label_dir):
 #             print(f"이미지 파일 없음: {orig_image_path}")
 
 # print(f"총 처리된 파일 수: {len(selected_label_files)}")
+
+import os
+
+# 원본 데이터 디렉토리 경로
+image_dir = r"C:\Users\acorn\OneDrive\Desktop\5000tank\images"
+label_dir = r"C:\Users\acorn\OneDrive\Desktop\5000tank\labels"
+
+# 지원하는 이미지 확장자
+image_extensions = (".jpg", ".jpeg", ".png")
+
+# 이미지와 라벨 파일 목록 수집
+image_files = [os.path.splitext(f)[0] for f in os.listdir(image_dir) if f.lower().endswith(image_extensions)]
+label_files = [os.path.splitext(f)[0] for f in os.listdir(label_dir) if f.endswith(".txt")]
+
+# 집합으로 변환하여 비교
+image_set = set(image_files)
+label_set = set(label_files)
+
+# 이름이 일치하지 않는 파일 찾기
+images_without_labels = image_set - label_set  # 이미지에는 있지만 라벨에는 없는 파일
+labels_without_images = label_set - image_set  # 라벨에는 있지만 이미지에는 없는 파일
+
+# 결과 출력
+print(f"총 이미지 파일 수: {len(image_files)}")
+print(f"총 라벨 파일 수: {len(label_files)}")
+print(f"라벨 파일이 없는 이미지 파일 수: {len(images_without_labels)}")
+if images_without_labels:
+    print("라벨 파일이 없는 이미지 파일 목록:")
+    for img in sorted(images_without_labels):
+        print(f"  {img}")
+
+print(f"이미지 파일이 없는 라벨 파일 수: {len(labels_without_images)}")
+if labels_without_images:
+    print("이미지 파일이 없는 라벨 파일 목록:")
+    for lbl in sorted(labels_without_images):
+        print(f"  {lbl}")
+
+# 일치하는 파일 수
+matching_files = image_set & label_set
+print(f"이미지와 라벨이 일치하는 파일 수: {len(matching_files)}")
