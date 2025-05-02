@@ -1,0 +1,13 @@
+train: C:/project/Battlefield-object-recognition-learning-model/train3/train/images
+val: C:/project/Battlefield-object-recognition-learning-model/train3/valid/images
+test: C:/project/Battlefield-object-recognition-learning-model/train3/test/images
+
+nc: 1
+names: ['Enemy']
+
+roboflow:
+  workspace: ai-hxvps
+  project: object-recognition-64nqg
+  version: 17
+  license: CC BY 4.0
+  url: https://app.roboflow.com/ai-hxvps/object-recognition-64nqg/17
