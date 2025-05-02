@@ -8,10 +8,30 @@ const threatInfo = {
 
 // ✅ 상태 변수
 let lastPing = 999;
+let currentFPS = 0;
 let lastInfoReceived = Date.now();
 let lastDetectTime = Date.now();
 let lastFrameTime = Date.now();
-let currentFPS = 0;
+// ✅ MJPEG 프레임 수신 시간
+let lastFrameReceived = Date.now();
+let latestIsVideoConnected = true;
+
+// ✅ MJPEG 이미지 수신될 때마다 시간 갱신
+document.getElementById("live-image").onload = function () {
+  lastFrameReceived = Date.now();
+};
+
+// ✅ 주기적으로 영상 연결 여부 체크
+function checkVideoConnection() {
+  const gap = Date.now() - lastFrameReceived;
+  if (gap > 3000) {
+    latestIsVideoConnected = false;
+  } else {
+    latestIsVideoConnected = true;
+  }
+  setTimeout(checkVideoConnection, 1000);
+}
+checkVideoConnection();
 
 // ✅ FPS 측정 (crosshair.js 또는 MJPEG onload 후 호출 필요)
 function registerFPS() {
@@ -58,14 +78,33 @@ function updateConnectionScore() {
   // 통신신호 가중치
   const score =
     0.8 * normFps + 0.8 * normInfo + 0.8 * normDetect + 0.8 * normPing;
-  updateSignalBars(score);
+  updateSignalBars(score, latestIsVideoConnected); // ✅ 수정
+  console.log("infoGap:", infoGap, "detectGap:", detectGap, "score:", score);
 }
 
 // ✅ 통신 신호 바 상태 업데이트
-function updateSignalBars(score) {
+function updateSignalBars(score, isVideoConnected) {
   const bars = document.querySelectorAll(".signal-bar .bar");
-  const commElem = document.getElementById("comm");
 
+  // ✅ 추가: commElem과 errorIcon 가져오기
+  const commElem = document.getElementById("comm");
+  const errorIcon = document.getElementById("signal-error-icon");
+
+  commElem.classList.remove("status-danger", "status-weak", "status-normal");
+
+  // ✅ 1️⃣ 통신 상태 클래스 추가 (CSS에서 스타일 적용)
+  if (!isVideoConnected) {
+    commElem.classList.add("status-danger");
+    if (errorIcon) errorIcon.style.display = "block";
+  } else if (score < 0.125) {
+    commElem.classList.add("status-weak");
+    if (errorIcon) errorIcon.style.display = "none";
+  } else {
+    commElem.classList.add("status-normal");
+    if (errorIcon) errorIcon.style.display = "none";
+  }
+
+  // ✅ 2️⃣ signal bar 단계 클래스 추가 (CSS에서 스타일 적용)
   let activeCount = 0;
   if (score >= 0.875) activeCount = 4;
   else if (score >= 0.625) activeCount = 3;
@@ -73,16 +112,19 @@ function updateSignalBars(score) {
   else if (score >= 0.125) activeCount = 1;
 
   bars.forEach((bar, idx) => {
-    bar.style.backgroundColor = idx < activeCount ? "#00ff00" : "#222";
-  });
-  // ✅ score가 낮으면 danger 클래스 추가
-  if (commElem) {
-    if (score < 0.125) {
-      commElem.classList.add("signal-danger");
+    bar.classList.remove("active", "inactive", "disconnected", "weak");
+
+    if (!isVideoConnected) {
+      bar.classList.add("disconnected");
+    } else if (score < 0.125) {
+      bar.classList.add("weak");
+    } else if (idx < activeCount) {
+      bar.classList.add("active");
     } else {
-      commElem.classList.remove("signal-danger");
+      bar.classList.add("inactive");
     }
-  }
+    console.log("bar", idx, "클래스:", bar.className);
+  });
 }
 
 // ✅ HUD: 속도·위치·체력 등 정보 표시
@@ -113,6 +155,7 @@ async function updateHUDStatus() {
   } catch (err) {
     console.warn("HUD 상태 갱신 실패:", err);
   }
+  console.log("isVideoConnected:", latestIsVideoConnected);
 }
 
 // ✅ 위협 정보 및 객체 목록 표시

@@ -28,7 +28,7 @@ app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 # 모델 로드
-yolo_model = YOLO(BASE_DIR / "models" / "best.pt")
+yolo_model = YOLO(BASE_DIR / "yolo_weights" / "models" / "best.pt")
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH)
 
 move_command_queue = []
@@ -47,7 +47,8 @@ simulator_status = {
     "player_speed": 0,
     "player_health": 100,
     "enemy_health": 100,
-    "distance": 0
+    "distance": 0,
+    "is_info_received": False 
 }
 
 @app.get("/init_status")
@@ -92,7 +93,6 @@ async def send_action(turret: str = Form(...), weight: float = Form(...)):
 
     # 로그에 조준각 포함 기록
     action_log = f"[CMD] {turret} {weight:.2f} → pitch={turret_pitch_angle:.2f}°"
-    print(action_log)
     bullet_logs.append(action_log)
 
     action_command_queue.append({"turret": turret, "weight": weight})
@@ -171,7 +171,6 @@ async def update_bullet(request: Request):
         f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, "
         f"Z={data.get('z')}, Target={data.get('hit')}"
     )
-    print(log_msg)
     bullet_logs.append(log_msg)
 
     return {"status": "OK", "message": "Bullet impact data received"}
@@ -191,11 +190,22 @@ async def receive_simulator_info(request: Request):
         simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
         simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
         simulator_status["distance"] = data.get("distance", simulator_status["distance"])
+        simulator_status["is_info_received"] = True
+        simulator_status["last_info_time"] = time.time()
 
         return {"status": "success", "message": "Simulator info updated"}
 
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+
+def monitor_info_status():
+    while True:
+        last_time = simulator_status.get("last_info_time", 0)
+        if time.time() - last_time > 3:
+            simulator_status["is_info_received"] = False
+        time.sleep(1)
+
+threading.Thread(target=monitor_info_status, daemon=True).start()
 
 def open_browser():
     time.sleep(1)
