@@ -11,7 +11,6 @@
     <script defer src="/static/js/crosshair.js"></script>
 
     <style>
-      /* 위협 등급 색상 */
       .threat-level-1 {
         color: #28a745;
         font-weight: bold;
@@ -31,7 +30,6 @@
         color: #666;
       }
 
-      /* HUD 위협 감지 배경 */
       .danger.threat-level-1 {
         background-color: rgba(40, 167, 69, 0.1);
       }
@@ -41,16 +39,36 @@
       .danger.threat-level-3 {
         background-color: rgba(220, 53, 69, 0.1);
       }
+
+      .priority-cell {
+        text-align: center;
+        font-weight: bold;
+      }
+      .priority-cell.rank-1 {
+        color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+      }
+      .priority-cell.rank-2 {
+        color: #ff9800;
+        background-color: rgba(255, 152, 0, 0.1);
+      }
+      .priority-cell.rank-3 {
+        color: #28a745;
+        background-color: rgba(40, 167, 69, 0.1);
+      }
+
+      .location-cell {
+        color: #ffffff;
+        background-color: rgba(0, 255, 0, 0.05);
+        text-align: center;
+      }
     </style>
   </head>
 
-  <!-- ✅ tabindex="0" 유지 (키 입력용) -->
   <body tabindex="0">
-    <!-- 🖼️ 메인 컨테이너 -->
     <div class="main-container">
       <div class="video-section">
         <div class="video-wrapper">
-          <!-- ✅ src 직접 연결 -->
           <img id="live-image" src="/video_feed" alt="탐지 결과" />
           <div id="crosshair-wrapper">
             <canvas id="crosshair-canvas" width="200" height="200"></canvas>
@@ -70,11 +88,12 @@
                 <th>ID</th>
                 <th>위험등급</th>
                 <th>위치</th>
+                <th>우선순위</th>
               </tr>
             </thead>
             <tbody id="object-list-body">
               <tr>
-                <td colspan="4" style="text-align: center">위험요소 없음</td>
+                <td colspan="5" style="text-align: center">위험요소 없음</td>
               </tr>
             </tbody>
           </table>
@@ -82,7 +101,6 @@
       </div>
     </div>
 
-    <!-- 📊 HUD 패널 -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
       <div class="hud-item" id="position">좌표: 없음</div>
@@ -108,5 +126,95 @@
         🔧 기어: <span id="gear-level">2</span>
       </div>
     </div>
+
+    <script>
+      let lastObjects = [];
+      let lastUpdateTime = Date.now();
+
+      async function updateObjectList() {
+        try {
+          console.log("Fetching detected objects");
+          const response = await fetch('/get_detected_objects');
+          if (!response.ok) {
+            console.error(`Fetch error: ${response.status} ${response.statusText}`);
+            renderTable(lastObjects);
+            return;
+          }
+          const data = await response.json();
+          console.log("Received data:", JSON.stringify(data, null, 2));
+          const objects = data.ranked_objects || [];
+
+          if (objects.length === 0) {
+            console.log("No objects detected");
+            if (lastObjects.length > 0 && Date.now() - lastUpdateTime < 5000) {
+              renderTable(lastObjects);
+            } else {
+              renderTable([]);
+            }
+            return;
+          }
+
+          lastObjects = objects;
+          lastUpdateTime = Date.now();
+          renderTable(objects);
+          updateThreatDisplay(getHighestThreat(objects)); // hud.js의 위협 표시 호출
+        } catch (error) {
+          console.error('Error updating object list:', error);
+          renderTable(lastObjects);
+        }
+      }
+
+      function getHighestThreat(objects) {
+        const threatInfo = {
+          "LEVEL 3": { priority: 3 },
+          "LEVEL 2": { priority: 2 },
+          "LEVEL 1": { priority: 1 },
+          none: { priority: 0 }
+        };
+        let highestThreat = "none";
+        let highestPriority = 0;
+        objects.forEach(obj => {
+          const threatPriority = (threatInfo[obj.threat] || threatInfo["none"]).priority;
+          if (threatPriority > highestPriority) {
+            highestPriority = threatPriority;
+            highestThreat = obj.threat;
+          }
+        });
+        return highestThreat;
+      }
+
+      function renderTable(objects) {
+        const tbody = document.getElementById('object-list-body');
+        tbody.innerHTML = '';
+
+        if (objects.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center">위험요소 없음</td></tr>';
+          return;
+        }
+
+        objects.forEach(obj => {
+          const prevObj = lastObjects.find(prev => prev.id === obj.id);
+          if (prevObj) {
+            console.log(`ID=${obj.id} BBox change: [${prevObj.bbox}] → [${obj.bbox}]`);
+          }
+          const x = Math.round((obj.bbox[0] + obj.bbox[2]) / 2);
+          const y = Math.round((obj.bbox[1] + obj.bbox[3]) / 2);
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${obj.className}</td>
+            <td>${obj.id}</td>
+            <td class="threat-${obj.threat.replace('LEVEL ', 'level-')}">${obj.threat}</td>
+            <td class="location-cell">(${x}, ${y})</td>
+            <td class="priority-cell rank-${obj.rank}">${obj.rank}</td>
+          `;
+          tbody.appendChild(row);
+          console.log(`Rendered object: ID=${obj.id}, Rank=${obj.rank}, BBox=[${obj.bbox[0]}, ${obj.bbox[1]}, ${obj.bbox[2]}, ${obj.bbox[3]}]`);
+        });
+        console.log("Table updated with objects:", objects);
+      }
+
+      setInterval(updateObjectList, 1000);
+      updateObjectList();
+    </script>
   </body>
 </html>

@@ -2,11 +2,11 @@ from fastapi import FastAPI, File, UploadFile, Request, Form
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from pathlib import Path
-from models.detect import detect as detect_func
+from models.detect import detect as detect_func, prioritize_by_class_and_area
 from datetime import datetime
-
 import tensorflow as tf
 import shutil
 import threading
@@ -15,31 +15,40 @@ import os
 import time
 import cv2
 import numpy as np
+import logging
 
-# 탭 기본 설정
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 BASE_DIR = Path(__file__).resolve().parent
 TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # EfficientNet 모델 경로
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-# 모델 로드
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH)
 
 move_command_queue = []
 action_command_queue = []
 bullet_logs = []
-turret_pitch_angle = 0.0  # 초기 pitch (단위: degree)
-
+turret_pitch_angle = 0.0
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (60, 27)
-
 detected_objects = []
 
 simulator_status = {
@@ -48,7 +57,7 @@ simulator_status = {
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
-    "is_info_received": False 
+    "is_info_received": False
 }
 
 @app.get("/init_status")
@@ -83,18 +92,13 @@ async def send_move(move: str = Form(...), weight: float = Form(...)):
 async def send_action(turret: str = Form(...), weight: float = Form(...)):
     global turret_pitch_angle
     coef = 5.0
-
     if turret == "R":
         turret_pitch_angle += weight * coef
     elif turret == "F":
         turret_pitch_angle -= weight * coef
-
     turret_pitch_angle = max(-30.0, min(30.0, turret_pitch_angle))
-
-    # 로그에 조준각 포함 기록
     action_log = f"[CMD] {turret} {weight:.2f} → pitch={turret_pitch_angle:.2f}°"
     bullet_logs.append(action_log)
-
     action_command_queue.append({"turret": turret, "weight": weight})
     return JSONResponse(content={"status": "OK", "message": "Command queued"})
 
@@ -115,7 +119,7 @@ async def detect_api(image: UploadFile = File(...)):
     return await detect_func(
         image=image,
         yolo_model=yolo_model,
-        efficientnet_model=efficientnet_model,  # EfficientNet 모델 전달
+        efficientnet_model=efficientnet_model,
         crosshair_path=CROSSHAIR_PATH,
         tmp_path=TMP_PATH,
         detected_objects=detected_objects
@@ -123,7 +127,12 @@ async def detect_api(image: UploadFile = File(...)):
 
 @app.get("/get_detected_objects")
 async def get_detected_objects():
-    return {"objects": detected_objects}
+    ranked_objects = prioritize_by_class_and_area(detected_objects)
+    logger.info(f"Returning detected objects: {len(ranked_objects)}, Ranks: {[obj['rank'] for obj in ranked_objects]}")
+    return {
+        "objects": ranked_objects,  # Unity 호환성 유지
+        "ranked_objects": ranked_objects
+    }
 
 @app.get("/video_feed")
 def video_feed():
@@ -166,13 +175,12 @@ async def update_bullet(request: Request):
     if not data:
         return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Invalid request data"})
     
-    impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # 시간.밀리초까지
+    impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     log_msg = (
         f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, "
         f"Z={data.get('z')}, Target={data.get('hit')}"
     )
     bullet_logs.append(log_msg)
-
     return {"status": "OK", "message": "Bullet impact data received"}
 
 @app.get("/get_logs")
@@ -184,7 +192,6 @@ async def receive_simulator_info(request: Request):
     global simulator_status
     try:
         data = await request.json()
-
         simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
         simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
         simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
@@ -192,9 +199,7 @@ async def receive_simulator_info(request: Request):
         simulator_status["distance"] = data.get("distance", simulator_status["distance"])
         simulator_status["is_info_received"] = True
         simulator_status["last_info_time"] = time.time()
-
         return {"status": "success", "message": "Simulator info updated"}
-
     except Exception as e:
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
 
@@ -215,4 +220,4 @@ if __name__ == "__main__":
     if os.environ.get("RUN_MAIN") != "true":
         threading.Thread(target=open_browser).start()
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=True)
