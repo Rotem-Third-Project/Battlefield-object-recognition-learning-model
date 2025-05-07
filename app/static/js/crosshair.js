@@ -233,6 +233,16 @@ async function updateCrosshair() {
     // E) crosshair 그리기
     drawCrosshair(ctx, isDetected, isAim);
 
+    // F) detect 신호 처리 (objects.length 관계없이 무조건 호출)
+    if (typeof markDetect === "function") {
+      markDetect();
+    }
+
+    // G) 프레임 수신 기록 (프레임이 렌더될 때마다 갱신)
+    if (typeof markFrameReceived === "function") {
+      markFrameReceived();
+    }
+
     // 디버깅용 로그
     console.log({
       isDetected,

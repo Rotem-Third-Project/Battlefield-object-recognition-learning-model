@@ -341,15 +341,23 @@ h3 {
 /* ================================
    위협 등급 텍스트
 ================================ */
-.threat-level-1 {
-  color: yellow;
+.hud-item.threat-level-1 {
+  border-color: #00ff00 !important;
+  box-shadow: 0 0 8px #00ff00;
 }
-.threat-level-2 {
-  color: orange;
+
+.hud-item.threat-level-2 {
+  border-color: orange !important;
+  box-shadow: 0 0 8px orange;
 }
-.threat-level-3 {
-  color: red;
+
+.hud-item.threat-level-3 {
+  border-color: #ff3c3c !important;
+  box-shadow: 0 0 10px #ff3c3c;
 }
-.threat-none {
+
+.hud-item.threat-none {
+  border-color: #00ff00 !important;
   color: gray;
+  box-shadow: none;
 }
