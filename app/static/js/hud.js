@@ -19,6 +19,7 @@ let latestIsVideoConnected = true;
 // ✅ MJPEG 이미지 수신될 때마다 시간 갱신
 document.getElementById("live-image").onload = function () {
   lastFrameReceived = Date.now();
+  console.log("✅ 프레임 수신됨:", lastFrameReceived);
 };
 
 // ✅ 주기적으로 영상 연결 여부 체크
@@ -59,27 +60,36 @@ function markInfoReceived() {
 
 // ✅ detect 수신 추적 (crosshair.js 또는 추론 후 호출)
 function markDetect() {
-  lastDetectTime = Date.now();
+  const now = Date.now();
+  detectInterval = now - lastDetectTime; // 최근 detect 간격 저장
+  lastDetectTime = now;
+  console.log("✅ markDetect 호출됨:", lastDetectTime, "간격:", detectInterval);
 }
 
 // ✅ 통신 스코어 계산
 function updateConnectionScore() {
   const now = Date.now();
   const infoGap = now - lastInfoReceived;
-  const detectGap = now - lastDetectTime;
   const ping = lastPing;
   const fps = currentFPS;
 
   const normFps = Math.min(fps / 30, 1);
   const normInfo = 1 - Math.min(infoGap / 1000, 1);
-  const normDetect = 1 - Math.min(detectGap / 1000, 1);
+  const normDetect = 1 - Math.min(detectInterval / 1000, 1);
   const normPing = 1 - Math.min(ping / 300, 1);
 
   // 통신신호 가중치
   const score =
     0.8 * normFps + 0.8 * normInfo + 0.8 * normDetect + 0.8 * normPing;
   updateSignalBars(score, latestIsVideoConnected); // ✅ 수정
-  console.log("infoGap:", infoGap, "detectGap:", detectGap, "score:", score);
+  console.log(
+    "infoGap:",
+    infoGap,
+    "detectGap:",
+    detectInterval,
+    "score:",
+    score
+  );
 }
 
 // ✅ 통신 신호 바 상태 업데이트
