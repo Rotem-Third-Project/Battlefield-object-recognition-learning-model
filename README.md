@@ -159,5 +159,15 @@ flowchart TD
 
     click G "http://localhost:5000" "로컬 FastAPI 서버 접속"
 ```
+### 외부 접속 가능하게 방화벽 해제 방법
+관리자 권한 설정 되어 있는 cmd에서 아래 명령어 입력
 
+```bash
+netsh advfirewall firewall add rule name="FastAPI 5000" dir=in action=allow protocol=TCP localport=5000
+```
+
+사용 후
+```bash
+netsh advfirewall firewall delete rule name="FastAPI 5000"
+```
 ---
