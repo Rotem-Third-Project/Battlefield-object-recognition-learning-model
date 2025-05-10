@@ -1,101 +1,21 @@
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, logger
 from fastapi.responses import JSONResponse
 import numpy as np
 import cv2
 from pathlib import Path
-import logging
-from deep_sort_realtime.deepsort_tracker import DeepSort
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# DeepSORT 트래커 초기화
-# embedder_gpu=True로 설정 시, PyTorch GPU 버전 및 CUDA 설치 필요. CPU만 사용 시 False로 변경.
-# embedder_wts=None으로 설정 시, torchreid가 모델 가중치를 자동 다운로드 시도할 수 있습니다.
-# 실제 운영 환경에서는 모델 가중치 파일을 미리 준비하고 경로를 지정하는 것이 안정적입니다.
-try:
-    tracker = DeepSort(
-        max_age=30,  # 트랙이 유지되는 최대 프레임 수
-        n_init=3,  # 트랙 확정까지 필요한 초기 탐지 횟수
-        max_iou_distance=0.6,  # IoU 기반 매칭 시 최대 거리
-        max_cosine_distance=0.5,  # 코사인 유사도(외형) 기반 매칭 시 최대 거리 (낮을수록 엄격)
-        nn_budget=200,  # 각 트랙에 대해 저장할 외형 특징의 수
-        embedder="mobilenet",  # 외형 특징 추출기 종류 ("mobilenet", "clip_RN50" 등도 가능)
-        embedder_model_name="mobilenetv2_x1_0",  # 사용할 외형 특징 모델 이름
-        embedder_wts=None,  # 미리 학습된 가중치 파일 경로 (None이면 자동 다운로드 시도)
-        half=True,  # FP16 추론 사용 여부
-        embedder_gpu=True,  # 외형 특징 추출 시 GPU 사용 여부
-        polygon=False,  # 다각형 ROI 사용 여부S
-    )
-    logger.info("DeepSort tracker initialized successfully.")
-except Exception as e:
-    logger.error(
-        f"Failed to initialize DeepSort tracker: {str(e)}. Tracking will be disabled."
-    )
-    tracker = None
-
-
-def prioritize_by_class_and_area(detected_objects):
-    logger.info("Prioritizing detected objects")
-    class_priority = {
-        "Enemy_Front": 3,  # 최고 우선순위
-        "Enemy_Side": 2,  # 중간
-        "Enemy_Rear": 1,  # 최저
-    }
-
-    prioritized = sorted(
-        detected_objects,
-        key=lambda x: (
-            class_priority.get(x["className"], 0),
-            (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]),
-            x["confidence"],
-        ),
-        reverse=True,
-    )
-
-    # 순위 부여
-    for i, obj in enumerate(prioritized, 1):
-        obj["rank"] = i
-
-    logger.info(f"Prioritized objects with ranks: {prioritized}")
-    return prioritized
-
-
-# IoU 계산 함수
-def compute_iou(boxA, boxB):  # box format: [x1, y1, x2, y2]
-    xA = max(boxA[0], boxB[0])
-    yA = max(boxA[1], boxB[1])
-    xB = min(boxA[2], boxB[2])
-    yB = min(boxA[3], boxB[3])
-    interArea = max(0, xB - xA) * max(0, yB - yA)
-    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-    iou = (
-        interArea / float(boxAArea + boxBArea - interArea)
-        if (boxAArea + boxBArea - interArea) > 0
-        else 0
-    )
-    return iou
-
-
-async def process_image_array(
-    image,
-    yolo_model=None,
-    efficientnet_model=None,
-    crosshair_path=None,
-    tmp_path=None,
-    detected_objects=None,
-):
+async def detect(image: UploadFile = File(...), yolo_model=None, efficientnet_model=None, crosshair_path=None, tmp_path=None, detected_objects=None):
     try:
-        logger.info("Starting image detection")
-        img_cv = image
-        if img_cv is None:
-            logger.error("Failed to decode image")
-            return JSONResponse(
-                status_code=400, content={"status": "ERROR", "message": "Invalid image"}
-            )
-
+        # 이미지 로드
+        image_bytes = await image.read()
+    except Exception as e:
+        logger.error(f"Error while reading the image: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "ERROR", "message": f"Image reading error: {str(e)}"},
+        )
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
         logger.info("Image loaded and converted to RGB")
 
@@ -344,26 +264,6 @@ async def process_image_array(
         detected_objects.clear()
         detected_objects.extend(ranked_objects)
 
-        try:
-            cv2.imwrite(str(tmp_path), img_cv)
-            logger.info(
-                f"Processed image with detections and tracks saved to {tmp_path}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to save image: {str(e)}")
+    cv2.imwrite(str(tmp_path), img_cv)
 
-        # 기존 반환 형식 유지 (filtered_results에는 rank가 없음)
-        # 만약 rank 정보도 API 응답에 포함해야 한다면 ranked_objects를 반환해야 함.
-        # 현재 요청은 DeepSORT 추가이므로, 기존 반환 필드 외에 track_id만 추가된 filtered_results를 반환.
-        # 하지만 prioritize_by_class_and_area가 filtered_results를 직접 수정하지 않고 새로운 리스트(ranked_objects)를 반환하므로,
-        # filtered_results에는 rank가 없고, ranked_objects에는 rank가 있음.
-        # 만약 API 사용처에서 순위가 필요하다면 ranked_objects를 반환하는 것이 맞음.
-        # 여기서는 '기존 반환 형식 유지' 및 '순위 부여'를 모두 고려하여,
-        # track_id가 포함되고 순위가 부여된 ranked_objects를 반환하는 것으로 변경합니다.
-        # 이렇게 하면 detected_objects와 API 응답이 일관성을 가집니다.
-        return img_cv
-    except Exception as e:
-        logger.error(f"Overall detection process failed: {str(e)}")
-        return JSONResponse(
-            status_code=500, content={"status": "ERROR", "message": str(e)}
-        )
+    return JSONResponse(content=filtered_results)

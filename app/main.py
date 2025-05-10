@@ -46,8 +46,8 @@ stream_q = asyncio.Queue(maxsize=2)
 
 BASE_DIR = Path(__file__).resolve().parent
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
-TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # EfficientNet 모델 경로
+
 app = FastAPI()
 
 ############################################################
@@ -171,96 +171,22 @@ async def get_logs():
 # 📌 시뮬레이터 정보 수신
 @app.post("/info")
 async def receive_simulator_info(request: Request):
-    data = await request.json()
-    simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
-    simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
-    simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
-    simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
-    simulator_status["distance"] = data.get("distance", simulator_status["distance"])
-    simulator_status["is_info_received"] = True
-    simulator_status["last_info_time"] = time.time()
-    return {"status": "success"}
+    global simulator_status
+    try:
+        data = await request.json()
 
-# 📌 ROI 설정 API (웹에서 ROI 변경 가능)
-@app.post("/set_roi")
-async def set_roi(request: Request):
-    global size_x, size_y, DESIRED_SIZE
-    data = await request.json()
-    ROI["top"] = int(data.get("top", ROI["top"]))
-    ROI["left"] = int(data.get("left", ROI["left"]))
-    ROI["width"] = int(data.get("width", ROI["width"]))
-    ROI["height"] = int(data.get("height", ROI["height"]))
+        simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
+        simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
+        simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
+        simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
+        simulator_status["distance"] = data.get("distance", simulator_status["distance"])
+        simulator_status["is_info_received"] = True
+        simulator_status["last_info_time"] = time.time()
 
-    size_x = ROI["width"]
-    size_y = ROI["height"]
-    DESIRED_SIZE = (size_x, size_y)
+        return {"status": "success", "message": "Simulator info updated"}
 
-    return {"status": "success", "ROI": ROI}
-
-############################################################
-# 🎯 비동기 캡처 & 인코딩 루프
-############################################################
-
-async def capture_loop():
-    with mss.mss() as sct:
-        while True:
-            img = sct.grab(ROI.copy())
-            await capture_q.put(img)
-            await asyncio.sleep(INTERVAL)
-
-async def encode_loop():
-    while True:
-        sct_img = await capture_q.get()
-
-        arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
-            sct_img.height, sct_img.width, 3)
-        arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-
-        arr = await process_image_array(
-            image=arr,
-            yolo_model=yolo_model,
-            efficientnet_model=efficientnet_model,
-            crosshair_path=CROSSHAIR_PATH,
-            tmp_path=TEMP_PATH,
-            detected_objects=detected_objects
-        )
-
-        small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
-        _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-        await stream_q.put(jpeg.tobytes())
-
-        await asyncio.sleep(0)
-
-async def generate_mjpeg():
-    while True:
-        frame = await stream_q.get()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        await asyncio.sleep(0)
-
-@app.get("/video_feed")
-async def video_feed():
-    return StreamingResponse(generate_mjpeg(),
-                             media_type='multipart/x-mixed-replace; boundary=frame')
-
-############################################################
-# 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
-############################################################
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    asyncio.create_task(capture_loop())
-    asyncio.create_task(encode_loop())
-    yield
-
-app.router.lifespan_context = lifespan
-
-############################################################
-# 🏁 서버 실행 설정
-############################################################
-
-SERVER_IP = get_local_ip()
-DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
 
 def monitor_info_status():
     while True:

@@ -23,6 +23,17 @@
   box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
 }
 
+.bbox {
+  position: absolute;
+  border: 2px solid;
+  background-color: transparent;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 10;
+}
+
 /* === 기본 스타일 === */
 body {
   margin: 0;
@@ -360,4 +371,30 @@ h3 {
   border-color: #00ff00 !important;
   color: gray;
   box-shadow: none;
+}
+
+/* ================================
+   우선 순위
+================================ */
+.priority-cell {
+  text-align: center;
+  font-weight: bold;
+}
+.priority-cell.rank-1 {
+  color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.1);
+}
+.priority-cell.rank-2 {
+  color: #ff9800;
+  background-color: rgba(255, 152, 0, 0.1);
+}
+.priority-cell.rank-3 {
+  color: #28a745;
+  background-color: rgba(40, 167, 69, 0.1);
+}
+
+.location-cell {
+  color: #ffffff;
+  background-color: rgba(0, 255, 0, 0.05);
+  text-align: center;
 }

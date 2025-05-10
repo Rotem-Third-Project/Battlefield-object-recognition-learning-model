@@ -21,6 +21,7 @@ code . --reuse-window
 📄 루트 파일
 ├── .gitignore  # Git이 추적하지 않아야 할 파일 및 디렉토리를 정의
 ├── name.py
+├── NewMap.map
 ├── package-lock.json  # 의존성 버전을 고정하는 자동 생성 파일
 ├── package.json  # Node.js 프로젝트 설정 및 의존성 정의 파일
 ├── README.md  # 프로젝트 소개 및 사용법 문서
@@ -158,5 +159,15 @@ flowchart TD
 
     click G "http://localhost:5000" "로컬 FastAPI 서버 접속"
 ```
+### 외부 접속 가능하게 방화벽 해제 방법
+관리자 권한 설정 되어 있는 cmd에서 아래 명령어 입력
 
+```bash
+netsh advfirewall firewall add rule name="FastAPI 5000" dir=in action=allow protocol=TCP localport=5000
+```
+
+사용 후
+```bash
+netsh advfirewall firewall delete rule name="FastAPI 5000"
+```
 ---
