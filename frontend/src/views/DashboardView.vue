@@ -1,35 +1,57 @@
 <template>
   <div class="dashboard">
-    <VideoFeed />
-    <CrosshairCanvas />
-    <ObjectList />
+    <div class="main-container">
+      <VideoSection />
+      <ObjectList />
+    </div>
     <HUD />
   </div>
 </template>
 
 <script>
-import VideoFeed from '@/components/VideoFeed.vue'
-import CrosshairCanvas from '@/components/CrosshairCanvas.vue'
+import VideoSection from '@/components/VideoSection.vue'
 import ObjectList from '@/components/ObjectList.vue'
 import HUD from '@/components/HUD.vue'
 
 export default {
   name: 'DashboardView',
   components: {
-    VideoFeed,
-    CrosshairCanvas,
+    VideoSection,
     ObjectList,
     HUD
   }
 }
 </script>
 
-<style scoped>
+<style>
+body {
+  margin: 0;
+  font-family: "Share Tech Mono", monospace;
+  background-color: #0a0a0a;
+  color: #00ff00;
+  padding: 1rem;
+  font-size: 1rem;
+}
+
 .dashboard {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  background-color: #000;
-  overflow: hidden;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  flex: 1;
+}
+
+h3 {
+  margin: 0.5rem 0;
+  text-align: center;
+  font-size: 1.5rem;
 }
 </style> 

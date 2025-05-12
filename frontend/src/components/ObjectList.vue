@@ -1,11 +1,30 @@
 <template>
-  <div class="object-list">
-    <h3>감지된 객체</h3>
-    <ul>
-      <li v-for="(obj, index) in detectedObjects" :key="index">
-        {{ obj.class }} (신뢰도: {{ (obj.confidence * 100).toFixed(1) }}%)
-      </li>
-    </ul>
+  <div class="object-list-section">
+    <h3>탐지된 객체 목록</h3>
+    <div class="object-list-wrapper">
+      <table id="object-list">
+        <thead>
+          <tr>
+            <th>클래스명</th>
+            <th>ID</th>
+            <th>위험등급</th>
+            <th>위치</th>
+            <th>우선순위</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="obj in detectedObjects" :key="obj.id">
+            <td>{{ obj.class }}</td>
+            <td>{{ obj.id }}</td>
+            <td>{{ obj.threat_level }}</td>
+            <td class="location-cell">{{ obj.location }}</td>
+            <td :class="['priority-cell', `rank-${obj.priority}`]">
+              {{ obj.priority }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -18,10 +37,11 @@ export default {
     }
   },
   mounted() {
-    this.startObjectDetection()
+    this.fetchObjects()
+    setInterval(this.fetchObjects, 1000)
   },
   methods: {
-    async startObjectDetection() {
+    async fetchObjects() {
       try {
         const response = await fetch('http://localhost:8000/detect_objects')
         const data = await response.json()
@@ -35,34 +55,63 @@ export default {
 </script>
 
 <style scoped>
-.object-list {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 15px;
-  border-radius: 8px;
-  max-width: 300px;
+.object-list-section {
+  flex: 3;
+  max-height: 100%;
+  overflow-y: auto;
+  background-color: rgba(0, 255, 0, 0.05);
+  border: 2px solid #00ff00;
+  padding: 1rem;
+  box-shadow: 0 0 8px #00ff00;
+  border-radius: 10px;
 }
 
-h3 {
-  margin: 0 0 10px 0;
-  font-size: 1.2em;
+#object-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 0.9rem;
 }
 
-ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+#object-list th,
+#object-list td {
+  border: 1px solid #00ff00;
+  padding: 8px;
+  text-align: center;
 }
 
-li {
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+#object-list th {
+  background-color: #111;
+  color: #00ff00;
 }
 
-li:last-child {
-  border-bottom: none;
+#object-list tbody tr:nth-child(even) {
+  background-color: rgba(0, 255, 0, 0.05);
+}
+
+.priority-cell {
+  font-weight: bold;
+}
+
+.priority-cell.rank-1 {
+  color: #ff3c3c;
+}
+
+.priority-cell.rank-2 {
+  color: #ffa500;
+}
+
+.priority-cell.rank-3 {
+  color: #00ff00;
+}
+
+.location-cell {
+  font-family: monospace;
+}
+
+@media (max-width: 768px) {
+  .object-list-section {
+    display: none;
+  }
 }
 </style> 
