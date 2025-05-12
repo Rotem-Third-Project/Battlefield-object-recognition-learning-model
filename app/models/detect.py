@@ -5,6 +5,7 @@ import cv2
 from pathlib import Path
 import logging
 from deep_sort_realtime.deepsort_tracker import DeepSort
+import math
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,43 @@ except Exception as e:
     )
     tracker = None
 
+BARREL_X = 960
+BARREL_Y = 883
+TOLERANCE = 15
+
+def compute_turret_weight(delta, tolerance=TOLERANCE):
+    abs_delta = abs(delta)
+    if abs_delta <= tolerance:
+        return 0.0
+    extra = abs_delta - tolerance
+    if extra <= 200:
+        return 0.1
+    elif extra <= 300:
+        return 0.5
+    elif extra <= 500:
+        return 0.8
+    return 1.0
+
+def predict_distance_front(y1, y2):
+    y_len = y2 - y1
+    return round(-0.080115*y_len + 0.000849*y_len**2 - 0.000003*y_len**3 + 3.126158, 4)
+
+def predict_distance_side(y1, y2):
+    y_len = y2 - y1
+    return round(-0.052057*y_len + 0.000291*y_len**2 + 2.936584, 4)
+
+def predict_distance_rear(y1, y2):
+    y_len = y2 - y1
+    return round(-0.045228*y_len + 0.000245*y_len**2 + 2.449860, 4)
+
+def calculate_aiming_angle(distance_km: float, velocity_mps: float) -> float:
+    g = 15
+    R = distance_km * 1000
+    ratio = (R * g) / (velocity_mps ** 2)
+    if not -1 <= ratio <= 1:
+        raise ValueError("명중 불가능한 조건")
+    theta_rad = 0.5 * math.asin(ratio)
+    return math.degrees(theta_rad)
 
 def prioritize_by_class_and_area(detected_objects):
     logger.info("Prioritizing detected objects")
@@ -80,13 +118,16 @@ def compute_iou(boxA, boxB):  # box format: [x1, y1, x2, y2]
 
 
 async def process_image_array(
-    image,
+    image=None,
     yolo_model=None,
     efficientnet_model=None,
     crosshair_path=None,
     tmp_path=None,
     detected_objects=None,
+    horizontal_command_queue=None,
+    set_target_callback=None
 ):
+    global TARGET
     try:
         logger.info("Starting image detection")
         img_cv = image
@@ -343,6 +384,43 @@ async def process_image_array(
         detected_objects.clear()
         detected_objects.extend(ranked_objects)
 
+        if ranked_objects:
+            top = ranked_objects[0]
+            x1, y1, x2, y2 = top['bbox']
+            dx = ((x1 + x2) / 2) - BARREL_X
+
+            # 수평 회전 명령
+            wx = compute_turret_weight(dx)
+            if horizontal_command_queue is not None:
+                if dx > TOLERANCE: 
+                    horizontal_command_queue.clear()
+                    horizontal_command_queue.append({"turret":"E","weight":wx})
+                elif dx < -TOLERANCE: 
+                    horizontal_command_queue.clear()
+                    horizontal_command_queue.append({"turret":"Q","weight":wx})
+                else: horizontal_command_queue.append({"turret":" ","weight":0.0})
+
+            # 거리 & 각도
+            cls = top['className'].split('-')[0]
+            if cls == "Enemy_Front":
+               distance_km = predict_distance_front(y1, y2)
+               vel = 237.86
+            elif cls=="Enemy_Side": 
+                distance_km= predict_distance_side(y1,y2)
+                vel = 234.59
+            elif cls=="Enemy_Rear": 
+                distance_km= predict_distance_rear(y1,y2)
+                vel = 224.31
+            else: distance_km=None
+
+            if distance_km is not None:
+                try:
+                    angle  = calculate_aiming_angle(distance_km,vel)
+                    set_target_callback(angle)
+                    logger.info(f"Auto-aim: top={top['className']} bbox={top['bbox']}, dx={dx:.1f}, TARGET={angle}")
+                    logger.info(f"Action queue: {horizontal_command_queue}")
+                except: pass
+                
         try:
             cv2.imwrite(str(tmp_path), img_cv)
         except Exception as e:

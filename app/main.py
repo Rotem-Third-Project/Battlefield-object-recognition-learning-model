@@ -63,11 +63,15 @@ efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile
 
 move_command_queue = []
 action_command_queue = []
+horizontal_command_queue = []
+vertical_command_queue = []
 bullet_logs = []
 turret_pitch_angle = 0.0
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (60, 27)
+last_turret_y = None
+TARGET = 9.42  # 초기값
 
 detected_objects = []
 
@@ -79,6 +83,10 @@ simulator_status = {
     "distance": 0,
     "is_info_received": False
 }
+def set_target(val: float):
+    global TARGET
+    TARGET = val
+    
 
 ############################################################
 # 🌐 FastAPI 엔드포인트
@@ -111,8 +119,18 @@ async def get_move():
 # 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action():
-    if action_command_queue:
-        return action_command_queue.pop(0)
+    global vertical_command_queue, horizontal_command_queue,last_turret_y, TARGET
+    print("📡 [get_action] 호출됨")
+    if last_turret_y is not None:
+        error = TARGET - last_turret_y
+        direction = "R" if error > 0 else "F"
+        w = min(0.15 * abs(error), 1.0)
+        vertical_command_queue.clear()
+        vertical_command_queue.append({"turret": direction, "weight": w})
+    if horizontal_command_queue:
+        return horizontal_command_queue.pop(0)
+    if vertical_command_queue:
+        return vertical_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
 # 📌 객체 감지 결과 제공
@@ -160,7 +178,10 @@ async def get_logs():
 # 📌 시뮬레이터 정보 수신
 @app.post("/info")
 async def receive_simulator_info(request: Request):
+    global simulator_status,last_turret_y
     data = await request.json()
+    last_turret_y = data.get("playerTurretY")
+    print(f"[INFO] 터렛 Y각 수신: {last_turret_y}")
     simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
     simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
@@ -211,7 +232,9 @@ async def encode_loop():
             efficientnet_model=efficientnet_model,
             crosshair_path=CROSSHAIR_PATH,
             tmp_path=TEMP_PATH,
-            detected_objects=detected_objects
+            detected_objects=detected_objects,
+            horizontal_command_queue= horizontal_command_queue,
+            set_target_callback=set_target
         )
 
         small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
