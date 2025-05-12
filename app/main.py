@@ -24,17 +24,17 @@ import os
 ############################################################
 
 disp_x, disp_y = 2560, 1440
-size_x, size_y = 1900, 1020
+size_x, size_y = 2560, 1440  # 작업표시줄 높이(40px)를 제외한 전체화면 크기
 DESIRED_SIZE = (size_x, size_y)
 
 FPS = 120
 INTERVAL = 1.0 / FPS
 
 ROI = {
-    'top':    int((disp_y - size_y) // 2),
-    'left':   int((disp_x - size_x) // 2),
-    'width':  size_x,
-    'height': size_y
+    'top':    0,  # 상단에서 시작
+    'left':   0,  # 좌측에서 시작
+    'width':  size_x,  # 전체 가로 크기
+    'height': size_y  # 작업표시줄을 제외한 세로 크기
 }
 
 capture_q = asyncio.Queue(maxsize=2)
@@ -181,7 +181,6 @@ async def receive_simulator_info(request: Request):
     global simulator_status,last_turret_y
     data = await request.json()
     last_turret_y = data.get("playerTurretY")
-    print(f"[INFO] 터렛 Y각 수신: {last_turret_y}")
     simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
     simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])

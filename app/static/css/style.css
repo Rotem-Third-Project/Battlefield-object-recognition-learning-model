@@ -23,16 +23,38 @@
   box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
 }
 
-/* .bbox {
+.bbox {
   position: absolute;
   border: 2px solid;
-  background-color: transparent;
+  background-color: rgba(0, 0, 0, 0.3);
   color: white;
   font-size: 12px;
   font-weight: bold;
   pointer-events: none;
   z-index: 10;
-} */
+  padding: 2px 4px;
+  text-shadow: 1px 1px 1px black;
+}
+
+.bbox.threat-level-3 {
+  border-color: #ff0000;
+  background-color: rgba(255, 0, 0, 0.2);
+}
+
+.bbox.threat-level-2 {
+  border-color: #ffa500;
+  background-color: rgba(255, 165, 0, 0.2);
+}
+
+.bbox.threat-level-1 {
+  border-color: #ffff00;
+  background-color: rgba(255, 255, 0, 0.2);
+}
+
+.bbox.threat-none {
+  border-color: #00ff00;
+  background-color: rgba(0, 255, 0, 0.2);
+}
 
 /* === 기본 스타일 === */
 body {
@@ -69,15 +91,20 @@ h3 {
 .video-wrapper {
   position: relative;
   width: 100%;
+  height: calc(100vh - 200px); /* HUD와 여백을 고려한 높이 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 실시간 MJPEG 영상 */
 #live-image {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain; /* 비율 유지하면서 컨테이너에 맞춤 */
   display: block;
   border: 2px solid #00ff00;
-  margin: 1rem 0;
+  margin: 0;
   box-shadow: 0 0 10px #00ff00;
 }
 
