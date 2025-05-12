@@ -284,11 +284,10 @@ def monitor_info_status():
 threading.Thread(target=monitor_info_status, daemon=True).start()
 
 if __name__ == "__main__":
-    if os.environ.get("RUN_MAIN") != "true":
-        print("🖥️ 대시보드 접속 주소:")
-        print(f"👉 {DASHBOARD_URL}")
+    print("🖥️ 대시보드 접속 주소:")
+    print(f"👉 {DASHBOARD_URL}")
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
 
 ###########################################################
 # 프론트엔드 리소스 설정

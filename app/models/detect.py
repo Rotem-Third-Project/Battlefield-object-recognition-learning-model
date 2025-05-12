@@ -3,13 +3,8 @@ from fastapi.responses import JSONResponse
 import numpy as np
 import cv2
 from pathlib import Path
-import logging
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import math
-
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # DeepSORT 트래커 초기화
 # embedder_gpu=True로 설정 시, PyTorch GPU 버전 및 CUDA 설치 필요. CPU만 사용 시 False로 변경.
@@ -27,13 +22,9 @@ try:
         embedder_wts=None,  # 미리 학습된 가중치 파일 경로 (None이면 자동 다운로드 시도)
         half=True,  # FP16 추론 사용 여부
         embedder_gpu=True,  # 외형 특징 추출 시 GPU 사용 여부
-        polygon=False,  # 다각형 ROI 사용 여부S
+        polygon=False,  # 다각형 ROI 사용 여부
     )
-    logger.info("DeepSort tracker initialized successfully.")
 except Exception as e:
-    logger.error(
-        f"Failed to initialize DeepSort tracker: {str(e)}. Tracking will be disabled."
-    )
     tracker = None
 
 BARREL_X = 960
@@ -75,7 +66,6 @@ def calculate_aiming_angle(distance_km: float, velocity_mps: float) -> float:
     return math.degrees(theta_rad)
 
 def prioritize_by_class_and_area(detected_objects):
-    logger.info("Prioritizing detected objects")
     class_priority = {
         "Enemy_Front": 3,  # 최고 우선순위
         "Enemy_Side": 2,  # 중간
@@ -96,7 +86,6 @@ def prioritize_by_class_and_area(detected_objects):
     for i, obj in enumerate(prioritized, 1):
         obj["rank"] = i
 
-    logger.info(f"Prioritized objects with ranks: {prioritized}")
     return prioritized
 
 
@@ -129,52 +118,19 @@ async def process_image_array(
 ):
     global TARGET
     try:
-        logger.info("Starting image detection")
         img_cv = image
         if img_cv is None:
-            logger.error("Failed to decode image")
             return JSONResponse(
                 status_code=400, content={"status": "ERROR", "message": "Invalid image"}
             )
 
         img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
-        logger.info("Image loaded and converted to RGB")
 
         # YOLOv8으로 객체 탐지
         try:
             results = list(yolo_model.predict(img_cv, verbose=False, stream=True))
             detections_yolo = results[0].boxes.data.cpu().numpy()
-            logger.info(
-                f"Detected {len(detections_yolo)} objects with YOLO (before class filtering)"
-            )
-            if len(detections_yolo) > 0:
-                logger.debug(
-                    f"Raw YOLO detections (first 5 if many): {detections_yolo[:5]}"
-                )
-                raw_detection_details = []
-                for i, det_box in enumerate(detections_yolo):
-                    raw_class_id = int(det_box[5])
-                    raw_confidence = float(det_box[4])
-                    raw_detection_details.append(
-                        {
-                            "original_idx": i,
-                            "class_id": raw_class_id,
-                            "confidence": raw_confidence,
-                            "bbox_ltrb": det_box[:4].tolist(),
-                        }
-                    )
-                    if i >= 10 and len(detections_yolo) > 10:
-                        raw_detection_details.append(
-                            {
-                                "message": f"... and {len(detections_yolo) - 10} more detections not shown."
-                            }
-                        )
-                        break
-                logger.info(
-                    f"Raw YOLO detection details (class_id, confidence, bbox): {raw_detection_details}"
-                )
         except Exception as e:
-            logger.error(f"YOLO detection failed: {str(e)}")
             return JSONResponse(
                 status_code=500,
                 content={"status": "ERROR", "message": f"YOLO error: {str(e)}"},
@@ -204,9 +160,7 @@ async def process_image_array(
             if crosshair is None:
                 raise ValueError("Crosshair image not found")
             crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
-            logger.info("Crosshair loaded")
         except Exception as e:
-            logger.error(f"Failed to load crosshair: {str(e)}")
             crosshair = None
 
         tracks = []
@@ -216,9 +170,7 @@ async def process_image_array(
             for i, box_data in enumerate(detections_yolo):
                 x1_ds, y1_ds, x2_ds, y2_ds, conf_ds, class_id_ds_float = box_data
                 class_id_ds = int(class_id_ds_float)
-                if (
-                    class_id_ds in target_classes
-                ):  # target_classes는 YOLO class id -> name 맵
+                if class_id_ds in target_classes:  # target_classes는 YOLO class id -> name 맵
                     w_ds = x2_ds - x1_ds
                     h_ds = y2_ds - y1_ds
                     # (bbox_tlwh, confidence, class_name_str)
@@ -235,11 +187,8 @@ async def process_image_array(
                 tracks = tracker.update_tracks(
                     deepsort_input_for_tracking, frame=img_rgb
                 )
-                logger.info(f"DeepSORT tracks updated: {len(tracks)} tracks found.")
-            else:
-                logger.info("No suitable detections for DeepSORT input.")
         else:
-            logger.warning("DeepSort tracker is not available. Skipping tracking.")
+            tracks = []
 
         # YOLO 탐지 결과(detections_yolo)와 DeepSORT 트랙(tracks)을 매핑
         yolo_idx_to_track_id = {}
@@ -281,9 +230,6 @@ async def process_image_array(
                 x1, y1, x2, y2 = map(int, box[:4])
                 confidence = float(box[4])
                 yolo_class_name = target_classes[class_id]
-                logger.info(
-                    f"Processing detection: {yolo_class_name}, confidence: {confidence}"
-                )
 
                 current_track_id = yolo_idx_to_track_id.get(idx)
 
@@ -320,7 +266,6 @@ async def process_image_array(
                     if cropped_image.shape[0] == 0 or cropped_image.shape[1] == 0:
                         efficientnet_class_label = "Unknown"
                         efficientnet_prob = 0.0
-                        logger.warning("Empty cropped image for EfficientNet")
                     else:
                         try:
                             cropped_image_resized = cv2.resize(
@@ -339,7 +284,6 @@ async def process_image_array(
                                 predictions[0][predicted_class_idx]
                             )
                         except Exception as e:
-                            logger.error(f"EfficientNet prediction failed: {str(e)}")
                             efficientnet_class_label = "Unknown"
                             efficientnet_prob = 0.0
 
@@ -417,14 +361,12 @@ async def process_image_array(
                 try:
                     angle  = calculate_aiming_angle(distance_km,vel)
                     set_target_callback(angle)
-                    logger.info(f"Auto-aim: top={top['className']} bbox={top['bbox']}, dx={dx:.1f}, TARGET={angle}")
-                    logger.info(f"Action queue: {horizontal_command_queue}")
                 except: pass
                 
         try:
             cv2.imwrite(str(tmp_path), img_cv)
         except Exception as e:
-            logger.error(f"Failed to save image: {str(e)}")
+            pass
 
         # 기존 반환 형식 유지 (filtered_results에는 rank가 없음)
         # 만약 rank 정보도 API 응답에 포함해야 한다면 ranked_objects를 반환해야 함.
@@ -437,7 +379,6 @@ async def process_image_array(
         # 이렇게 하면 detected_objects와 API 응답이 일관성을 가집니다.
         return img_cv
     except Exception as e:
-        logger.error(f"Overall detection process failed: {str(e)}")
         return JSONResponse(
             status_code=500, content={"status": "ERROR", "message": str(e)}
         )
