@@ -1,44 +1,77 @@
-from fastapi import FastAPI, File, UploadFile, Request, Form
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from ultralytics import YOLO
 from pathlib import Path
-from models.detect import detect as detect_func
 from datetime import datetime
+from contextlib import asynccontextmanager
+from utils.network import get_local_ip
+from models.detect import process_image_array
+from fastapi.middleware.cors import CORSMiddleware
 
 import tensorflow as tf
-import shutil
-import threading
-import webbrowser
-import os
-import time
+import asyncio
+import mss
 import cv2
 import numpy as np
+import threading
+import time
+import os
 
-# 탭 기본 설정
+############################################################
+# 🖼️ 이미지 처리 설정
+############################################################
+
+disp_x, disp_y = 2560, 1440
+size_x, size_y = 2560, 1440  # 작업표시줄 높이(40px)를 제외한 전체화면 크기
+DESIRED_SIZE = (size_x, size_y)
+
+FPS = 120
+INTERVAL = 1.0 / FPS
+
+ROI = {
+    'top':    0,  # 상단에서 시작
+    'left':   0,  # 좌측에서 시작
+    'width':  size_x,  # 전체 가로 크기
+    'height': size_y  # 작업표시줄을 제외한 세로 크기
+}
+
+capture_q = asyncio.Queue(maxsize=2)
+stream_q = asyncio.Queue(maxsize=2)
+
+############################################################
+# 🛰️ FastAPI 앱 & 리소스 초기화
+############################################################
+
 BASE_DIR = Path(__file__).resolve().parent
-TMP_PATH = BASE_DIR / "tmp" / "temp_image.jpg"
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # EfficientNet 모델 경로
-
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
+TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
 app = FastAPI()
+
+# 프론트엔드 리소스 설정
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-# 모델 로드
-yolo_model = YOLO(BASE_DIR / "yolo_weights" / "models" / "best.pt")
-efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH)
+yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
+efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+
+############################################################
+# 🧠 상태 변수들
+############################################################
 
 move_command_queue = []
 action_command_queue = []
+horizontal_command_queue = []
+vertical_command_queue = []
 bullet_logs = []
-turret_pitch_angle = 0.0  # 초기 pitch (단위: degree)
-
+turret_pitch_angle = 0.0
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
 current_position = (60, 27)
+last_turret_y = None
+TARGET = 9.42  # 초기값
 
 detected_objects = []
 
@@ -48,21 +81,23 @@ simulator_status = {
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
-    "is_info_received": False 
+    "is_info_received": False
 }
+def set_target(val: float):
+    global TARGET
+    TARGET = val
+    
 
-@app.get("/init_status")
-async def init_status():
-    return {"turret_pitch": turret_pitch_angle}
+############################################################
+# 🌐 FastAPI 엔드포인트
+############################################################
 
+# 📌 대시보드 렌더
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
-@app.get("/turret_control_dashboard", response_class=HTMLResponse)
-async def turret_dashboard(request: Request):
-    return templates.TemplateResponse("turret_control_dashboard.html", {"request": request})
-
+# 📌 키 입력 처리
 @app.post("/input_key")
 async def input_key(key: str = Form(...)):
     global gear_level
@@ -74,129 +109,169 @@ async def input_key(key: str = Form(...)):
         gear_level -= 1
     return {"gear": gear_level}
 
-@app.post("/send_move")
-async def send_move(move: str = Form(...), weight: float = Form(...)):
-    move_command_queue.append({"move": move, "weight": weight})
-    return RedirectResponse(url="/dashboard", status_code=303)
-
-@app.post("/send_action")
-async def send_action(turret: str = Form(...), weight: float = Form(...)):
-    global turret_pitch_angle
-    coef = 5.0
-
-    if turret == "R":
-        turret_pitch_angle += weight * coef
-    elif turret == "F":
-        turret_pitch_angle -= weight * coef
-
-    turret_pitch_angle = max(-30.0, min(30.0, turret_pitch_angle))
-
-    # 로그에 조준각 포함 기록
-    action_log = f"[CMD] {turret} {weight:.2f} → pitch={turret_pitch_angle:.2f}°"
-    bullet_logs.append(action_log)
-
-    action_command_queue.append({"turret": turret, "weight": weight})
-    return JSONResponse(content={"status": "OK", "message": "Command queued"})
-
+# 📌 이동 명령 요청
 @app.get("/get_move")
 async def get_move():
     if move_command_queue:
         return move_command_queue.pop(0)
     return {"move": "STOP", "weight": 1.0}
 
+# 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action():
-    if action_command_queue:
-        return action_command_queue.pop(0)
+    global vertical_command_queue, horizontal_command_queue,last_turret_y, TARGET
+    print("📡 [get_action] 호출됨")
+    if last_turret_y is not None:
+        error = TARGET - last_turret_y
+        direction = "R" if error > 0 else "F"
+        w = min(0.15 * abs(error), 1.0)
+        vertical_command_queue.clear()
+        vertical_command_queue.append({"turret": direction, "weight": w})
+    if horizontal_command_queue:
+        return horizontal_command_queue.pop(0)
+    if vertical_command_queue:
+        return vertical_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-@app.post("/detect")
-async def detect_api(image: UploadFile = File(...)):
-    return await detect_func(
-        image=image,
-        yolo_model=yolo_model,
-        efficientnet_model=efficientnet_model,  # EfficientNet 모델 전달
-        crosshair_path=CROSSHAIR_PATH,
-        tmp_path=TMP_PATH,
-        detected_objects=detected_objects
-    )
-
+# 📌 객체 감지 결과 제공
 @app.get("/get_detected_objects")
 async def get_detected_objects():
-    return {"objects": detected_objects}
+    return {
+        "roi": ROI,
+        "objects": detected_objects
+    }
 
-@app.get("/video_feed")
-def video_feed():
-    def generate():
-        while True:
-            if TMP_PATH.exists():
-                frame = cv2.imread(str(TMP_PATH))
-                if frame is None:
-                    time.sleep(0.005)
-                    continue
-                _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
-                )
-            time.sleep(0.016)
-    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
-
+# 📌 시뮬레이터 시작 위치
 @app.get("/init")
 async def init():
-    config = {
+    return {
         "startMode": "start",
-        "blStartX": 60,
-        "blStartY": 10,
-        "blStartZ": 27.23,
-        "rdStartX": 59,
-        "rdStartY": 10,
-        "rdStartZ": 280
+        "blStartX": 60, "blStartY": 10, "blStartZ": 27.23,
+        "rdStartX": 59, "rdStartY": 10, "rdStartZ": 280
     }
-    return JSONResponse(content=config)
 
+# 📌 상태 정보 제공 (HUD.js가 사용)
 @app.get("/get_status")
 async def get_status():
     simulator_status["turret_pitch"] = turret_pitch_angle
-    return simulator_status
+    return {
+        **simulator_status,
+        "ROI": ROI,
+        "size_x": size_x,
+        "size_y": size_y
+    }
 
+# 📌 포탄 충돌 정보 수신
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
     data = await request.json()
-    if not data:
-        return JSONResponse(status_code=400, content={"status": "ERROR", "message": "Invalid request data"})
-    
-    impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # 시간.밀리초까지
-    log_msg = (
-        f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, "
-        f"Z={data.get('z')}, Target={data.get('hit')}"
-    )
+    impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    log_msg = f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}"
     bullet_logs.append(log_msg)
+    return {"status": "OK"}
 
-    return {"status": "OK", "message": "Bullet impact data received"}
-
+# 📌 로그 요청
 @app.get("/get_logs")
 async def get_logs():
     return {"logs": bullet_logs[-20:]}
 
+# 📌 시뮬레이터 정보 수신
 @app.post("/info")
 async def receive_simulator_info(request: Request):
-    global simulator_status
-    try:
-        data = await request.json()
+    global simulator_status,last_turret_y
+    data = await request.json()
+    last_turret_y = data.get("playerTurretY")
+    simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
+    simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
+    simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
+    simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
+    simulator_status["distance"] = data.get("distance", simulator_status["distance"])
+    simulator_status["is_info_received"] = True
+    simulator_status["last_info_time"] = time.time()
+    return {"status": "success"}
 
-        simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
-        simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
-        simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
-        simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
-        simulator_status["distance"] = data.get("distance", simulator_status["distance"])
-        simulator_status["is_info_received"] = True
-        simulator_status["last_info_time"] = time.time()
+# 📌 ROI 설정 API (웹에서 ROI 변경 가능)
+@app.post("/set_roi")
+async def set_roi(request: Request):
+    global size_x, size_y, DESIRED_SIZE
+    data = await request.json()
+    ROI["top"] = int(data.get("top", ROI["top"]))
+    ROI["left"] = int(data.get("left", ROI["left"]))
+    ROI["width"] = int(data.get("width", ROI["width"]))
+    ROI["height"] = int(data.get("height", ROI["height"]))
 
-        return {"status": "success", "message": "Simulator info updated"}
+    size_x = ROI["width"]
+    size_y = ROI["height"]
+    DESIRED_SIZE = (size_x, size_y)
 
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+    return {"status": "success", "ROI": ROI}
+
+############################################################
+# 🎯 비동기 캡처 & 인코딩 루프
+############################################################
+
+async def capture_loop():
+    with mss.mss() as sct:
+        while True:
+            img = sct.grab(ROI.copy())
+            await capture_q.put(img)
+            await asyncio.sleep(INTERVAL)
+
+async def encode_loop():
+    while True:
+        sct_img = await capture_q.get()
+
+        arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
+            sct_img.height, sct_img.width, 3)
+        arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
+        arr = await process_image_array(
+            image=arr,
+            yolo_model=yolo_model,
+            efficientnet_model=efficientnet_model,
+            crosshair_path=CROSSHAIR_PATH,
+            tmp_path=TEMP_PATH,
+            detected_objects=detected_objects,
+            horizontal_command_queue= horizontal_command_queue,
+            set_target_callback=set_target
+        )
+
+        small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
+        _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+        await stream_q.put(jpeg.tobytes())
+
+        await asyncio.sleep(0)
+
+async def generate_mjpeg():
+    while True:
+        frame = await stream_q.get()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        await asyncio.sleep(0)
+
+@app.get("/video_feed")
+async def video_feed():
+    return StreamingResponse(generate_mjpeg(),
+                             media_type='multipart/x-mixed-replace; boundary=frame')
+
+############################################################
+# 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
+############################################################
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(capture_loop())
+    asyncio.create_task(encode_loop())
+    yield
+
+app.router.lifespan_context = lifespan
+
+############################################################
+# 🏁 서버 실행 설정
+############################################################
+
+SERVER_IP = get_local_ip()
+DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
 
 def monitor_info_status():
     while True:
@@ -207,12 +282,19 @@ def monitor_info_status():
 
 threading.Thread(target=monitor_info_status, daemon=True).start()
 
-def open_browser():
-    time.sleep(1)
-    webbrowser.open("http://localhost:5000/dashboard")
-
 if __name__ == "__main__":
-    if os.environ.get("RUN_MAIN") != "true":
-        threading.Thread(target=open_browser).start()
+    print("🖥️ 대시보드 접속 주소:")
+    print(f"👉 {DASHBOARD_URL}")
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True, access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
+
+###########################################################
+# 프론트엔드 리소스 설정
+###########################################################
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # 개발 중 전체 허용
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )

@@ -23,6 +23,39 @@
   box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
 }
 
+.bbox {
+  position: absolute;
+  border: 2px solid;
+  background-color: rgba(0, 0, 0, 0.3);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 10;
+  padding: 2px 4px;
+  text-shadow: 1px 1px 1px black;
+}
+
+.bbox.threat-level-3 {
+  border-color: #ff0000;
+  background-color: rgba(255, 0, 0, 0.2);
+}
+
+.bbox.threat-level-2 {
+  border-color: #ffa500;
+  background-color: rgba(255, 165, 0, 0.2);
+}
+
+.bbox.threat-level-1 {
+  border-color: #ffff00;
+  background-color: rgba(255, 255, 0, 0.2);
+}
+
+.bbox.threat-none {
+  border-color: #00ff00;
+  background-color: rgba(0, 255, 0, 0.2);
+}
+
 /* === 기본 스타일 === */
 body {
   margin: 0;
@@ -58,15 +91,20 @@ h3 {
 .video-wrapper {
   position: relative;
   width: 100%;
+  height: calc(100vh - 200px); /* HUD와 여백을 고려한 높이 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 실시간 MJPEG 영상 */
 #live-image {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain; /* 비율 유지하면서 컨테이너에 맞춤 */
   display: block;
   border: 2px solid #00ff00;
-  margin: 1rem 0;
+  margin: 0;
   box-shadow: 0 0 10px #00ff00;
 }
 
@@ -341,15 +379,49 @@ h3 {
 /* ================================
    위협 등급 텍스트
 ================================ */
-.threat-level-1 {
-  color: yellow;
+.hud-item.threat-level-1 {
+  border-color: #00ff00 !important;
+  box-shadow: 0 0 8px #00ff00;
 }
-.threat-level-2 {
-  color: orange;
+
+.hud-item.threat-level-2 {
+  border-color: orange !important;
+  box-shadow: 0 0 8px orange;
 }
-.threat-level-3 {
-  color: red;
+
+.hud-item.threat-level-3 {
+  border-color: #ff3c3c !important;
+  box-shadow: 0 0 10px #ff3c3c;
 }
-.threat-none {
+
+.hud-item.threat-none {
+  border-color: #00ff00 !important;
   color: gray;
+  box-shadow: none;
+}
+
+/* ================================
+   우선 순위
+================================ */
+.priority-cell {
+  text-align: center;
+  font-weight: bold;
+}
+.priority-cell.rank-1 {
+  color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.1);
+}
+.priority-cell.rank-2 {
+  color: #ff9800;
+  background-color: rgba(255, 152, 0, 0.1);
+}
+.priority-cell.rank-3 {
+  color: #28a745;
+  background-color: rgba(40, 167, 69, 0.1);
+}
+
+.location-cell {
+  color: #ffffff;
+  background-color: rgba(0, 255, 0, 0.05);
+  text-align: center;
 }

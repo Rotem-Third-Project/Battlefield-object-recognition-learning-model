@@ -5,52 +5,13 @@
     <title>🪖 전차 전투 대시보드</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/static/css/style.css" />
-
-    <script defer src="/static/js/keyboard.js"></script>
-    <script defer src="/static/js/hud.js"></script>
-    <script defer src="/static/js/crosshair.js"></script>
-
-    <style>
-      /* 위협 등급 색상 */
-      .threat-level-1 {
-        color: #28a745;
-        font-weight: bold;
-      }
-      .threat-level-2 {
-        color: #ff9800;
-        font-weight: bold;
-      }
-      .threat-level-3 {
-        color: #dc3545;
-        font-weight: bold;
-      }
-      .threat-normal {
-        color: gray;
-      }
-      .threat-none {
-        color: #666;
-      }
-
-      /* HUD 위협 감지 배경 */
-      .danger.threat-level-1 {
-        background-color: rgba(40, 167, 69, 0.1);
-      }
-      .danger.threat-level-2 {
-        background-color: rgba(255, 152, 0, 0.1);
-      }
-      .danger.threat-level-3 {
-        background-color: rgba(220, 53, 69, 0.1);
-      }
-    </style>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
   </head>
-
-  <!-- ✅ tabindex="0" 유지 (키 입력용) -->
-  <body tabindex="0">
-    <!-- 🖼️ 메인 컨테이너 -->
+  <body style="margin: 0; padding: 0; overflow: hidden">
+    <!-- ✅ 비디오 컨테이너 + HUD -->
     <div class="main-container">
       <div class="video-section">
         <div class="video-wrapper">
-          <!-- ✅ src 직접 연결 -->
           <img id="live-image" src="/video_feed" alt="탐지 결과" />
           <div id="crosshair-wrapper">
             <canvas id="crosshair-canvas" width="200" height="200"></canvas>
@@ -70,19 +31,17 @@
                 <th>ID</th>
                 <th>위험등급</th>
                 <th>위치</th>
+                <th>우선순위</th>
               </tr>
             </thead>
             <tbody id="object-list-body">
-              <tr>
-                <td colspan="4" style="text-align: center">위험요소 없음</td>
-              </tr>
+              <!-- 처음엔 비워두세요 -->
             </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- 📊 HUD 패널 -->
     <div class="hud">
       <div class="hud-item" id="speed">속도: 0 km/h</div>
       <div class="hud-item" id="position">좌표: 없음</div>
@@ -108,5 +67,12 @@
         🔧 기어: <span id="gear-level">2</span>
       </div>
     </div>
+
+    <!-- ✅ 스크립트 로드 -->
+    <script src="/static/js/priority.js"></script>
+    <script src="/static/js/hud.js"></script>
+    <script src="/static/js/crosshair.js"></script>
+    <script src="/static/js/keyboard.js"></script>
+    <script src="/static/js/viewport_sync.js"></script>
   </body>
 </html>
