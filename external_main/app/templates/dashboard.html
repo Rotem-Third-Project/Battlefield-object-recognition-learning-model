@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>🪖 전차 전투 대시보드</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+  </head>
+  <body style="margin: 0; padding: 0; overflow: hidden">
+    <!-- ✅ 비디오 컨테이너 + HUD -->
+    <div class="main-container">
+      <div class="video-section">
+        <div class="video-wrapper">
+          <img id="live-image" src="/video_feed" alt="탐지 결과" />
+          <div id="crosshair-wrapper">
+            <canvas id="crosshair-canvas" width="200" height="200"></canvas>
+            <div id="hud-distance">-- m</div>
+          </div>
+        </div>
+        <div id="fps"></div>
+      </div>
+
+      <div class="object-list-section">
+        <h3>탐지된 객체 목록</h3>
+        <div class="object-list-wrapper">
+          <table id="object-list">
+            <thead>
+              <tr>
+                <th>클래스명</th>
+                <th>ID</th>
+                <th>위험등급</th>
+                <th>위치</th>
+                <th>우선순위</th>
+              </tr>
+            </thead>
+            <tbody id="object-list-body">
+              <!-- 처음엔 비워두세요 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud">
+      <div class="hud-item" id="speed">속도: 0 km/h</div>
+      <div class="hud-item" id="position">좌표: 없음</div>
+      <div class="hud-item" id="health">
+        <div>전차 체력</div>
+        <div class="health-bar">
+          <div id="health-fill" class="health-fill"></div>
+        </div>
+        <div id="health-text">100%</div>
+      </div>
+      <div class="hud-item" id="threat">🚨 위협 감지: 없음</div>
+      <div class="hud-item" id="comm">
+        <div>📡 통신 신호</div>
+        <div class="signal-bar" style="position: relative">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div id="signal-error-icon">✖</div>
+        </div>
+      </div>
+      <div class="hud-item" id="gear">
+        🔧 기어: <span id="gear-level">2</span>
+      </div>
+    </div>
+
+    <!-- ✅ 스크립트 로드 -->
+    <script src="/static/js/priority.js"></script>
+    <script src="/static/js/hud.js"></script>
+    <script src="/static/js/crosshair.js"></script>
+    <script src="/static/js/keyboard.js"></script>
+    <script src="/static/js/viewport_sync.js"></script>
+  </body>
+</html>
