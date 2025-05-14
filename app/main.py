@@ -22,7 +22,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-model = YOLO(BASE_DIR / "models" / "transfer_yolo.pt")
+model = YOLO(BASE_DIR / "models" / "best.pt")
 
 move_command_queue = []
 action_command_queue = []
