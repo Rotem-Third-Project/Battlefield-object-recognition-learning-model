@@ -34,4 +34,4 @@ export default createStore({
       commit('updateSimulatorStatus', status)
     }
   }
-}) 
+})

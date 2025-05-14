@@ -1,3 +1,4 @@
+
 <template>
   <div class="hud">
     <div class="hud-item" id="speed">속도: {{ speed }} km/h</div>
@@ -182,4 +183,4 @@ export default {
   50% { box-shadow: 0 0 20px #ff3c3c; }
   100% { box-shadow: 0 0 5px #ff3c3c; }
 }
-</style> 
+</style>

@@ -3,13 +3,8 @@ from fastapi.responses import JSONResponse
 import numpy as np
 import cv2
 from pathlib import Path
-import logging
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import math
-
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # DeepSORT 트래커 초기화
 # embedder_gpu=True로 설정 시, PyTorch GPU 버전 및 CUDA 설치 필요. CPU만 사용 시 False로 변경.
@@ -27,127 +22,87 @@ try:
         embedder_wts=None,  # 미리 학습된 가중치 파일 경로 (None이면 자동 다운로드 시도)
         half=True,  # FP16 추론 사용 여부
         embedder_gpu=True,  # 외형 특징 추출 시 GPU 사용 여부
-        polygon=False,  # 다각형 ROI 사용 여부S
+        polygon=False,  # 다각형 ROI 사용 여부
     )
-    logger.info("DeepSort tracker initialized successfully.")
 except Exception as e:
-    logger.error(
-        f"Failed to initialize DeepSort tracker: {str(e)}. Tracking will be disabled."
-    )
     tracker = None
 
 BARREL_X = 960
 BARREL_Y = 883
 TOLERANCE = 15
 
-
 def compute_turret_weight(delta, tolerance=TOLERANCE):
     abs_delta = abs(delta)
     if abs_delta <= tolerance:
         return 0.0
-
-    # 벡터화된 연산을 위한 조건 배열
-    conditions = [
-        (abs_delta - tolerance) <= 200,
-        (abs_delta - tolerance) <= 300,
-        (abs_delta - tolerance) <= 500,
-    ]
-    weights = [0.1, 0.5, 0.8, 1.0]
-
-    # 조건에 맞는 가중치 반환
-    for condition, weight in zip(conditions, weights):
-        if condition:
-            return weight
-    return weights[-1]
-
+    extra = abs_delta - tolerance
+    if extra <= 200:
+        return 0.1
+    elif extra <= 300:
+        return 0.5
+    elif extra <= 500:
+        return 0.8
+    return 1.0
 
 def predict_distance_front(y1, y2):
     y_len = y2 - y1
-    # 다항식 계수를 배열로 정의
-    coeffs = np.array([-0.000003, 0.000849, -0.080115, 3.126158])
-    # 다항식 계산
-    return round(np.polyval(coeffs, y_len), 4)
-
+    return round(-0.080115*y_len + 0.000849*y_len**2 - 0.000003*y_len**3 + 3.126158, 4)
 
 def predict_distance_side(y1, y2):
     y_len = y2 - y1
-    # 다항식 계수를 배열로 정의
-    coeffs = np.array([0.000291, -0.052057, 2.936584])
-    # 다항식 계산
-    return round(np.polyval(coeffs, y_len), 4)
-
+    return round(-0.052057*y_len + 0.000291*y_len**2 + 2.936584, 4)
 
 def predict_distance_rear(y1, y2):
     y_len = y2 - y1
-    # 다항식 계수를 배열로 정의
-    coeffs = np.array([0.000245, -0.045228, 2.449860])
-    # 다항식 계산
-    return round(np.polyval(coeffs, y_len), 4)
-
+    return round(-0.045228*y_len + 0.000245*y_len**2 + 2.449860, 4)
 
 def calculate_aiming_angle(distance_km: float, velocity_mps: float) -> float:
     g = 15
     R = distance_km * 1000
-    ratio = (R * g) / (velocity_mps**2)
-
-    # 명중 불가능한 조건 체크를 벡터화
+    ratio = (R * g) / (velocity_mps ** 2)
     if not -1 <= ratio <= 1:
         raise ValueError("명중 불가능한 조건")
-
-    # 삼각함수 계산 최적화
-    theta_rad = 0.5 * np.arcsin(ratio)
-    return np.degrees(theta_rad)
-
+    theta_rad = 0.5 * math.asin(ratio)
+    return math.degrees(theta_rad)
 
 def prioritize_by_class_and_area(detected_objects):
-    logger.info("Prioritizing detected objects")
     class_priority = {
         "Enemy_Front": 3,  # 최고 우선순위
         "Enemy_Side": 2,  # 중간
         "Enemy_Rear": 1,  # 최저
     }
 
-    # 벡터화된 연산을 위한 준비
-    priorities = np.array(
-        [class_priority.get(obj["className"], 0) for obj in detected_objects]
+    prioritized = sorted(
+        detected_objects,
+        key=lambda x: (
+            class_priority.get(x["className"], 0),
+            (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]),
+            x["confidence"],
+        ),
+        reverse=True,
     )
-    areas = np.array(
-        [
-            (obj["bbox"][2] - obj["bbox"][0]) * (obj["bbox"][3] - obj["bbox"][1])
-            for obj in detected_objects
-        ]
-    )
-    confidences = np.array([obj["confidence"] for obj in detected_objects])
-
-    # 복합 정렬 인덱스 계산
-    sort_indices = np.lexsort((-confidences, -areas, -priorities))
-
-    # 정렬된 객체 리스트 생성
-    prioritized = [detected_objects[i] for i in sort_indices]
 
     # 순위 부여
     for i, obj in enumerate(prioritized, 1):
         obj["rank"] = i
 
-    logger.info(f"Prioritized objects with ranks: {prioritized}")
     return prioritized
-
 
 # IoU 계산 함수
 def compute_iou(boxA, boxB):  # box format: [x1, y1, x2, y2]
-    # 벡터화된 연산
-    x1 = np.maximum(boxA[0], boxB[0])
-    y1 = np.maximum(boxA[1], boxB[1])
-    x2 = np.minimum(boxA[2], boxB[2])
-    y2 = np.minimum(boxA[3], boxB[3])
-
-    intersection = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
-    boxA_area = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    boxB_area = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-
-    union = boxA_area + boxB_area - intersection
-    return intersection / union if union > 0 else 0
-
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    interArea = max(0, xB - xA) * max(0, yB - yA)
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+    iou = (
+        interArea / float(boxAArea + boxBArea - interArea)
+        if (boxAArea + boxBArea - interArea) > 0
+        else 0
+    )
+    return iou
 
 async def process_image_array(
     image=None,
@@ -157,56 +112,23 @@ async def process_image_array(
     tmp_path=None,
     detected_objects=None,
     horizontal_command_queue=None,
-    set_target_callback=None,
+    set_target_callback=None
 ):
     global TARGET
     try:
-        logger.info("Starting image detection")
         img_cv = image
         if img_cv is None:
-            logger.error("Failed to decode image")
             return JSONResponse(
                 status_code=400, content={"status": "ERROR", "message": "Invalid image"}
             )
 
         img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
-        logger.info("Image loaded and converted to RGB")
 
         # YOLOv8으로 객체 탐지
         try:
-            results = list(yolo_model.predict(img_cv, verbose=False, stream=False))
+            results = list(yolo_model.predict(img_cv, verbose=False, stream=True))
             detections_yolo = results[0].boxes.data.cpu().numpy()
-            logger.info(
-                f"Detected {len(detections_yolo)} objects with YOLO (before class filtering)"
-            )
-            if len(detections_yolo) > 0:
-                logger.debug(
-                    f"Raw YOLO detections (first 5 if many): {detections_yolo[:5]}"
-                )
-                raw_detection_details = []
-                for i, det_box in enumerate(detections_yolo):
-                    raw_class_id = int(det_box[5])
-                    raw_confidence = float(det_box[4])
-                    raw_detection_details.append(
-                        {
-                            "original_idx": i,
-                            "class_id": raw_class_id,
-                            "confidence": raw_confidence,
-                            "bbox_ltrb": det_box[:4].tolist(),
-                        }
-                    )
-                    if i >= 10 and len(detections_yolo) > 10:
-                        raw_detection_details.append(
-                            {
-                                "message": f"... and {len(detections_yolo) - 10} more detections not shown."
-                            }
-                        )
-                        break
-                logger.info(
-                    f"Raw YOLO detection details (class_id, confidence, bbox): {raw_detection_details}"
-                )
         except Exception as e:
-            logger.error(f"YOLO detection failed: {str(e)}")
             return JSONResponse(
                 status_code=500,
                 content={"status": "ERROR", "message": f"YOLO error: {str(e)}"},
@@ -236,9 +158,7 @@ async def process_image_array(
             if crosshair is None:
                 raise ValueError("Crosshair image not found")
             crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
-            logger.info("Crosshair loaded")
         except Exception as e:
-            logger.error(f"Failed to load crosshair: {str(e)}")
             crosshair = None
 
         tracks = []
@@ -248,9 +168,7 @@ async def process_image_array(
             for i, box_data in enumerate(detections_yolo):
                 x1_ds, y1_ds, x2_ds, y2_ds, conf_ds, class_id_ds_float = box_data
                 class_id_ds = int(class_id_ds_float)
-                if (
-                    class_id_ds in target_classes
-                ):  # target_classes는 YOLO class id -> name 맵
+                if class_id_ds in target_classes:  # target_classes는 YOLO class id -> name 맵
                     w_ds = x2_ds - x1_ds
                     h_ds = y2_ds - y1_ds
                     # (bbox_tlwh, confidence, class_name_str)
@@ -267,11 +185,8 @@ async def process_image_array(
                 tracks = tracker.update_tracks(
                     deepsort_input_for_tracking, frame=img_rgb
                 )
-                logger.info(f"DeepSORT tracks updated: {len(tracks)} tracks found.")
-            else:
-                logger.info("No suitable detections for DeepSORT input.")
         else:
-            logger.warning("DeepSort tracker is not available. Skipping tracking.")
+            tracks = []
 
         # YOLO 탐지 결과(detections_yolo)와 DeepSORT 트랙(tracks)을 매핑
         yolo_idx_to_track_id = {}
@@ -307,17 +222,42 @@ async def process_image_array(
                     # 여기서는 단순 best_match 사용.
                     yolo_idx_to_track_id[yolo_idx] = assigned_track_id
 
+        # [변경] EfficientNet 배치 처리를 위한 리스트 초기화
+        crop_images = []
+        crop_indices = []
+        crop_bboxes = []
+
         for idx, box in enumerate(detections_yolo):
             class_id = int(box[5])
             if class_id in target_classes:
                 x1, y1, x2, y2 = map(int, box[:4])
                 confidence = float(box[4])
                 yolo_class_name = target_classes[class_id]
-                logger.info(
-                    f"Processing detection: {yolo_class_name}, confidence: {confidence}"
-                )
 
                 current_track_id = yolo_idx_to_track_id.get(idx)
+
+                # 크로스헤어 오버레이
+                if crosshair is not None:
+                    cx = (x1 + x2) // 2
+                    cy = (y1 + y2) // 2
+                    h, w = crosshair.shape[:2]
+                    x_offset = max(cx - w // 2, 0)
+                    y_offset = max(cy - h // 2, 0)
+
+                    for c in range(3):
+                        alpha_s = crosshair[:, :, 3] / 255.0
+                        alpha_l = 1.0 - alpha_s
+                        for i in range(h):
+                            for j in range(w):
+                                if (
+                                    y_offset + i < img_cv.shape[0]
+                                    and x_offset + j < img_cv.shape[1]
+                                ):
+                                    img_cv[y_offset + i, x_offset + j, c] = (
+                                        alpha_s[i, j] * crosshair[i, j, c]
+                                        + alpha_l[i, j]
+                                        * img_cv[y_offset + i, x_offset + j, c]
+                                    )
 
                 # EfficientNet으로 분류
                 final_class_label_for_display = yolo_class_name
@@ -326,46 +266,19 @@ async def process_image_array(
 
                 if yolo_class_name == "enemy":
                     cropped_image = img_rgb[y1:y2, x1:x2]
-                    if (
-                        cropped_image.size == 0
-                        or cropped_image.shape[0] < 4
-                        or cropped_image.shape[1] < 4
-                    ):
+                    if cropped_image.shape[0] == 0 or cropped_image.shape[1] == 0:
                         efficientnet_class_label = "Unknown"
                         efficientnet_prob = 0.0
-                        logger.warning(
-                            "Empty or too small cropped image for EfficientNet"
-                        )
                     else:
-                        try:
-                            # 배치 처리를 위한 전처리
-                            cropped_image_resized = cv2.resize(
-                                cropped_image, (224, 224)
-                            )
-                            cropped_image_normalized = cropped_image_resized / 255.0
-
-                            # 배치 예측 (메모리 효율성 향상)
-                            predictions = efficientnet_model.predict(
-                                np.expand_dims(cropped_image_normalized, axis=0),
-                                verbose=0,
-                            )
-
-                            # 결과 처리
-                            predicted_class_idx = np.argmax(predictions[0])
-                            efficientnet_class_label = class_names[predicted_class_idx]
-                            efficientnet_prob = float(
-                                predictions[0][predicted_class_idx]
-                            )
-                        except Exception as e:
-                            logger.error(f"EfficientNet prediction failed: {str(e)}")
-                            efficientnet_class_label = "Unknown"
-                            efficientnet_prob = 0.0
-
-                    final_class_label_for_display = efficientnet_class_label
-                    prob_for_display = efficientnet_prob
-                    threat_level_for_display = threat_levels.get(
-                        efficientnet_class_label, "Unknown"
-                    )
+                        # [변경] 직렬 추론 대신 배치 처리를 위해 크롭 이미지 저장
+                        cropped_image_resized = cv2.resize(
+                            cropped_image, (224, 224)
+                        )
+                        cropped_image_normalized = cropped_image_resized / 255.0
+                        crop_images.append(cropped_image_normalized)
+                        crop_indices.append(idx)
+                        crop_bboxes.append([x1, y1, x2, y2])
+                        continue  # 배치 처리로 넘어감
 
                 box_color = threat_colors.get(threat_level_for_display, (128, 128, 128))
                 cv2.rectangle(img_cv, (x1, y1), (x2, y2), box_color, 2)
@@ -396,6 +309,98 @@ async def process_image_array(
                     }
                 )
 
+        # [변경] EfficientNet 배치 추론
+        if crop_images:
+            try:
+                # [변경] 메모리 관리를 위해 배치 크기 제한
+                max_batch_size = 4
+                for i in range(0, len(crop_images), max_batch_size):
+                    batch_images = np.stack(crop_images[i:i + max_batch_size], axis=0)
+                    batch_indices = crop_indices[i:i + max_batch_size]
+                    batch_bboxes = crop_bboxes[i:i + max_batch_size]
+                    predictions = efficientnet_model.predict(batch_images, verbose=0)
+
+                    # [변경] 각 예측 결과 처리
+                    for pred, idx, bbox in zip(predictions, batch_indices, batch_bboxes):
+                        x1, y1, x2, y2 = bbox
+                        confidence = float(detections_yolo[idx][4])
+                        current_track_id = yolo_idx_to_track_id.get(idx)
+
+                        predicted_class_idx = np.argmax(pred)
+                        efficientnet_class_label = class_names[predicted_class_idx]
+                        efficientnet_prob = float(pred[predicted_class_idx])
+
+                        final_class_label_for_display = efficientnet_class_label
+                        prob_for_display = efficientnet_prob
+                        threat_level_for_display = threat_levels.get(
+                            efficientnet_class_label, "Unknown"
+                        )
+
+                        box_color = threat_colors.get(threat_level_for_display, (128, 128, 128))
+                        cv2.rectangle(img_cv, (x1, y1), (x2, y2), box_color, 2)
+
+                        label_text = f"{final_class_label_for_display}: {prob_for_display:.2f} ({threat_level_for_display})"
+                        if current_track_id is not None:
+                            label_text += f" ID:{current_track_id}"
+
+                        cv2.putText(
+                            img_cv,
+                            label_text,
+                            (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            box_color,
+                            2,
+                        )
+
+                        filtered_results.append(
+                            {
+                                "className": final_class_label_for_display,
+                                "id": idx,
+                                "track_id": current_track_id,
+                                "threat": threat_level_for_display,
+                                "bbox": [x1, y1, x2, y2],
+                                "confidence": prob_for_display,
+                            }
+                        )
+            except Exception as e:
+                # [변경] 배치 추론 실패 시 기본값 설정
+                for idx, bbox in zip(crop_indices, crop_bboxes):
+                    x1, y1, x2, y2 = bbox
+                    confidence = float(detections_yolo[idx][4])
+                    current_track_id = yolo_idx_to_track_id.get(idx)
+                    final_class_label_for_display = "Unknown"
+                    prob_for_display = 0.0
+                    threat_level_for_display = "Unknown"
+
+                    box_color = threat_colors.get(threat_level_for_display, (128, 128, 128))
+                    cv2.rectangle(img_cv, (x1, y1), (x2, y2), box_color, 2)
+
+                    label_text = f"{final_class_label_for_display}: {prob_for_display:.2f} ({threat_level_for_display})"
+                    if current_track_id is not None:
+                        label_text += f" ID:{current_track_id}"
+
+                    cv2.putText(
+                        img_cv,
+                        label_text,
+                        (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        box_color,
+                        2,
+                    )
+
+                    filtered_results.append(
+                        {
+                            "className": final_class_label_for_display,
+                            "id": idx,
+                            "track_id": current_track_id,
+                            "threat": threat_level_for_display,
+                            "bbox": [x1, y1, x2, y2],
+                            "confidence": prob_for_display,
+                        }
+                    )
+
         # 순위 부여 및 detected_objects 업데이트
         ranked_objects = prioritize_by_class_and_area(filtered_results)
 
@@ -404,51 +409,43 @@ async def process_image_array(
 
         if ranked_objects:
             top = ranked_objects[0]
-            x1, y1, x2, y2 = top["bbox"]
+            x1, y1, x2, y2 = top['bbox']
             dx = ((x1 + x2) / 2) - BARREL_X
 
             # 수평 회전 명령
             wx = compute_turret_weight(dx)
             if horizontal_command_queue is not None:
-                if dx > TOLERANCE:
+                if dx > TOLERANCE: 
                     horizontal_command_queue.clear()
-                    horizontal_command_queue.append({"turret": "E", "weight": wx})
-                elif dx < -TOLERANCE:
+                    horizontal_command_queue.append({"turret":"E","weight":wx})
+                elif dx < -TOLERANCE: 
                     horizontal_command_queue.clear()
-                    horizontal_command_queue.append({"turret": "Q", "weight": wx})
-                else:
-                    horizontal_command_queue.append({"turret": " ", "weight": 0.0})
+                    horizontal_command_queue.append({"turret":"Q","weight":wx})
+                else: horizontal_command_queue.append({"turret":" ","weight":0.0})
 
             # 거리 & 각도
-            cls = top["className"].split("-")[0]
+            cls = top['className'].split('-')[0]
             if cls == "Enemy_Front":
-                distance_km = predict_distance_front(y1, y2)
-                vel = 237.86
-            elif cls == "Enemy_Side":
-                distance_km = predict_distance_side(y1, y2)
+               distance_km = predict_distance_front(y1, y2)
+               vel = 237.86
+            elif cls=="Enemy_Side": 
+                distance_km= predict_distance_side(y1,y2)
                 vel = 234.59
-            elif cls == "Enemy_Rear":
-                distance_km = predict_distance_rear(y1, y2)
+            elif cls=="Enemy_Rear": 
+                distance_km= predict_distance_rear(y1,y2)
                 vel = 224.31
-            else:
-                distance_km = None
+            else: distance_km=None
 
             if distance_km is not None:
                 try:
-                    angle = calculate_aiming_angle(distance_km, vel)
+                    angle  = calculate_aiming_angle(distance_km,vel)
                     set_target_callback(angle)
-                    logger.info(
-                        f"Auto-aim: top={top['className']} bbox={top['bbox']}, dx={dx:.1f}, TARGET={angle}"
-                    )
-                    logger.info(f"Action queue: {horizontal_command_queue}")
-                except:
-                    pass
-
+                except: pass
+                
         try:
-            pass
-            # cv2.imwrite(str(tmp_path), img_cv)
+            cv2.imwrite(str(tmp_path), img_cv)
         except Exception as e:
-            logger.error(f"Failed to save image: {str(e)}")
+            pass
 
         # 기존 반환 형식 유지 (filtered_results에는 rank가 없음)
         # 만약 rank 정보도 API 응답에 포함해야 한다면 ranked_objects를 반환해야 함.
@@ -458,10 +455,9 @@ async def process_image_array(
         # 만약 API 사용처에서 순위가 필요하다면 ranked_objects를 반환하는 것이 맞음.
         # 여기서는 '기존 반환 형식 유지' 및 '순위 부여'를 모두 고려하여,
         # track_id가 포함되고 순위가 부여된 ranked_objects를 반환하는 것으로 변경합니다.
-        # 이렇게 하면 detected_objects와 API 응답이 일관성을 가집니다.
+        # [변경] img_cv를 반환하여 기존 동작 유지
         return img_cv
     except Exception as e:
-        logger.error(f"Overall detection process failed: {str(e)}")
         return JSONResponse(
             status_code=500, content={"status": "ERROR", "message": str(e)}
         )

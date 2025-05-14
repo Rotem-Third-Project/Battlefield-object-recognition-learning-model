@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, WebSocket
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -18,7 +18,9 @@ import numpy as np
 import threading
 import time
 import os
-
+import io
+from PIL import Image
+import base64
 
 ############################################################
 # 🖼️ 이미지 처리 설정
@@ -57,17 +59,6 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
-
-##########################################################
-# 프론트엔드 리소스 설정
-##########################################################
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 개발 중 전체 허용
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 ############################################################
 # 🧠 상태 변수들
@@ -131,7 +122,7 @@ async def get_move():
 # 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action():
-    global vertical_command_queue, horizontal_command_queue,last_turret_y, TARGET
+    global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET
     print("📡 [get_action] 호출됨")
     if last_turret_y is not None:
         error = TARGET - last_turret_y
@@ -145,13 +136,40 @@ async def get_action():
         return vertical_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-# 📌 객체 감지 결과 제공
+# 📌 객체 감지 결과 제공 (기존 GET 엔드포인트)
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {
         "roi": ROI,
         "objects": detected_objects
     }
+
+# 📌 클라이언트 이미지로 객체 감지 (새 POST 엔드포인트)
+@app.post("/detect_objects")
+async def detect_objects_from_client(request: Request):
+    try:
+        data = await request.json()
+        image_data = data.get('image').split(',')[1]  # Base64 데이터 추출
+        img = Image.open(io.BytesIO(base64.b64decode(image_data)))
+        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        
+        # detect.py의 process_image_array 호출
+        processed_img = await process_image_array(
+            image=img_cv,
+            yolo_model=yolo_model,
+            efficientnet_model=efficientnet_model,
+            crosshair_path=CROSSHAIR_PATH,
+            tmp_path=TEMP_PATH,
+            detected_objects=detected_objects,
+            horizontal_command_queue=horizontal_command_queue,
+            set_target_callback=set_target
+        )
+        return {"objects": detected_objects}
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "ERROR", "message": str(e)}
+        )
 
 # 📌 시뮬레이터 시작 위치
 @app.get("/init")
@@ -190,7 +208,7 @@ async def get_logs():
 # 📌 시뮬레이터 정보 수신
 @app.post("/info")
 async def receive_simulator_info(request: Request):
-    global simulator_status,last_turret_y
+    global simulator_status, last_turret_y
     data = await request.json()
     last_turret_y = data.get("playerTurretY")
     simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
@@ -244,7 +262,7 @@ async def encode_loop():
             crosshair_path=CROSSHAIR_PATH,
             tmp_path=TEMP_PATH,
             detected_objects=detected_objects,
-            horizontal_command_queue= horizontal_command_queue,
+            horizontal_command_queue=horizontal_command_queue,
             set_target_callback=set_target
         )
 
@@ -272,7 +290,8 @@ async def video_feed():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(capture_loop())
+    # WebRTC로 전환했으므로 capture_loop 비활성화
+    # asyncio.create_task(capture_loop())
     asyncio.create_task(encode_loop())
     yield
 
@@ -300,3 +319,13 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
 
+##########################################################
+# 프론트엔드 리소스 설정
+##########################################################
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 개발 중 전체 허용
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
