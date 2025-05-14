@@ -108,10 +108,8 @@ def compute_iou(boxA, boxB):  # box format: [x1, y1, x2, y2]
 
 async def process_image_array(
     image=None,
-    yolo_model=None,
-    crosshair_path=None
+    yolo_model=None
 ):
-    global TARGET
     try:
         img_cv = image
         if img_cv is None:
@@ -125,6 +123,7 @@ async def process_image_array(
         try:
             results = list(yolo_model.predict(img_cv, verbose=False, stream=True))
             detections_yolo = results[0].boxes.data.cpu().numpy()
+            yolo_boxes=detections_yolo[:,:4]
         except Exception as e:
             return JSONResponse(
                 status_code=500,
@@ -133,20 +132,11 @@ async def process_image_array(
 
         target_classes = {0: "enemy", 2: "car", 7: "truck", 15: "rock"}
 
-        # 크로스헤어 로드
-        try:
-            crosshair = cv2.imread(str(crosshair_path), cv2.IMREAD_UNCHANGED)
-            if crosshair is None:
-                raise ValueError("Crosshair image not found")
-            crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
-        except Exception as e:
-            crosshair = None
-
         tracks = []
         if tracker:
             # DeepSORT 입력 리스트 생성
             deepsort_input_for_tracking = []
-            for i, box_data in enumerate(detections_yolo):
+            for box_data in enumerate(detections_yolo):
                 x1_ds, y1_ds, x2_ds, y2_ds, conf_ds, class_id_ds_float = box_data
                 class_id_ds = int(class_id_ds_float)
                 if class_id_ds in target_classes:  # target_classes는 YOLO class id -> name 맵
@@ -203,8 +193,7 @@ async def process_image_array(
                     # 여기서는 단순 best_match 사용.
                     yolo_idx_to_track_id[yolo_idx] = assigned_track_id
 
-        
-        return img_cv, detections_yolo, yolo_idx_to_track_id
+        return img_cv, yolo_boxes, yolo_idx_to_track_id
     except Exception as e:
         print(f"[process_image_array] 에러: {e}")
         return None, None, None
