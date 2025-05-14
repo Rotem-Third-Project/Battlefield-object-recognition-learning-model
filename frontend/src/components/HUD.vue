@@ -1,24 +1,22 @@
-
 <template>
   <div class="hud">
-    <div class="hud-item" id="speed">속도: {{ speed }} km/h</div>
-    <div class="hud-item" id="position">좌표: {{ position }}</div>
+    <div class="hud-item" id="speed">속도: 0 km/h</div>
+    <div class="hud-item" id="position">좌표: 없음</div>
     <div class="hud-item" id="health">
       <div>전차 체력</div>
       <div class="health-bar">
-        <div :style="{ width: health + '%' }" class="health-fill"></div>
+        <div id="health-fill" class="health-fill" :style="{ width: health + '%' }"></div>
       </div>
       <div id="health-text">{{ health }}%</div>
     </div>
-    <div class="hud-item" :class="threatClass" id="threat">
-      🚨 위협 감지: {{ threat }}
+    <div class="hud-item" :class="['danger', threatClass]" id="threat">
+      🚨 위협 감지: {{ threatText }}
     </div>
-    <div class="hud-item" :class="commClass" id="comm">
+    <div class="hud-item" id="comm">
       <div>📡 통신 신호</div>
       <div class="signal-bar">
-        <div v-for="i in 4" :key="i" 
-             :class="['bar', getSignalClass(i)]"></div>
-        <div v-if="!isConnected" id="signal-error-icon">✖</div>
+        <div v-for="(bar, index) in 4" :key="index" 
+             :class="['bar', getSignalClass(index)]"></div>
       </div>
     </div>
     <div class="hud-item" id="gear">
@@ -28,57 +26,72 @@
 </template>
 
 <script>
+// 직접 백엔드 URL 사용
+const API_URL = '/api'
+
 export default {
   name: 'HUD',
   data() {
     return {
-      speed: 0,
-      position: '없음',
       health: 100,
-      threat: '없음',
-      isConnected: true,
-      signalStrength: 4,
-      gear: 2
-    }
-  },
-  computed: {
-    threatClass() {
-      if (this.threat === '없음') return 'threat-none'
-      if (this.threat.includes('높음')) return 'threat-level-3'
-      if (this.threat.includes('중간')) return 'threat-level-2'
-      return 'threat-level-1'
-    },
-    commClass() {
-      if (!this.isConnected) return 'status-danger'
-      if (this.signalStrength <= 1) return 'status-weak'
-      return 'status-normal'
+      threatText: '없음',
+      threatClass: 'threat-none',
+      signalStrength: 1,
+      gear: 2,
+      lastUpdateTime: Date.now()
     }
   },
   mounted() {
-    this.updateStatus()
-    setInterval(this.updateStatus, 1000)
+    this.updateHUD()
+    setInterval(this.updateHUD, 1000)
   },
   methods: {
-    async updateStatus() {
+    async updateHUD() {
       try {
-        const response = await fetch('http://localhost:8000/get_status')
+        const response = await fetch('/api/get_detected_objects')
+        if (!response.ok) {
+          this.updateSignalStrength(0)
+          return
+        }
+        
         const data = await response.json()
-        this.speed = data.player_speed
-        this.position = `X:${data.player_pos.x.toFixed(1)} Y:${data.player_pos.y.toFixed(1)} Z:${data.player_pos.z.toFixed(1)}`
-        this.health = data.player_health
-        this.threat = data.threat || '없음'
-        this.isConnected = data.is_info_received
-        this.signalStrength = this.isConnected ? 4 : 0
+        const objects = data.ranked_objects || []
+        
+        // 위협 레벨 계산
+        const threatLevels = {
+          'LEVEL 3': 3,
+          'LEVEL 2': 2,
+          'LEVEL 1': 1,
+          'Normal': 0
+        }
+        
+        let highestThreat = 'Normal'
+        let highestLevel = 0
+        
+        objects.forEach(obj => {
+          const level = threatLevels[obj.threat] || 0
+          if (level > highestLevel) {
+            highestLevel = level
+            highestThreat = obj.threat
+          }
+        })
+        
+        this.threatText = highestThreat
+        this.threatClass = `threat-${highestThreat.toLowerCase().replace(' ', '-')}`
+        this.updateSignalStrength(1)
+        
       } catch (error) {
-        console.error('상태 업데이트 중 오류 발생:', error)
-        this.isConnected = false
-        this.signalStrength = 0
+        console.error('HUD 업데이트 중 오류 발생:', error)
+        this.updateSignalStrength(0)
       }
     },
+    updateSignalStrength(strength) {
+      this.signalStrength = strength
+    },
     getSignalClass(index) {
-      if (!this.isConnected) return 'disconnected'
-      if (index <= this.signalStrength) return 'active'
-      return 'inactive'
+      if (this.signalStrength === 0) return 'disconnected'
+      if (this.signalStrength < 0.3) return 'weak'
+      return index < this.signalStrength * 4 ? 'active' : 'inactive'
     }
   }
 }
@@ -87,30 +100,38 @@ export default {
 <style scoped>
 .hud {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 1rem;
-  padding: 1rem;
-  background-color: rgba(0, 255, 0, 0.05);
-  border-top: 2px solid #00ff00;
-  border-bottom: 2px solid #00ff00;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  padding: 10px;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  align-items: center;
 }
 
 .hud-item {
-  padding: 1rem;
+  padding: 8px;
   border: 1px solid #00ff00;
-  border-radius: 10px;
+  border-radius: 8px;
   text-align: center;
   background-color: rgba(0, 255, 0, 0.07);
-  font-size: 1rem;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .health-bar {
   width: 100%;
-  height: 20px;
+  height: 15px;
   background-color: rgba(0, 0, 0, 0.3);
   border: 1px solid #00ff00;
-  border-radius: 10px;
+  border-radius: 7px;
   overflow: hidden;
   margin: 5px 0;
 }
@@ -129,8 +150,8 @@ export default {
 }
 
 .bar {
-  width: 4px;
-  height: 20px;
+  width: 3px;
+  height: 15px;
   background-color: #00ff00;
   transition: all 0.3s ease;
 }
@@ -148,39 +169,38 @@ export default {
   background-color: #ff3c3c;
 }
 
-#signal-error-icon {
-  position: absolute;
-  right: 5px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #ff3c3c;
-  font-weight: bold;
+.bar.weak {
+  background-color: #ffa500;
 }
 
-.hud-item.threat-level-1 {
-  border-color: #ffa500;
-  color: #ffa500;
+.danger.threat-level-1 {
+  background-color: rgba(40, 167, 69, 0.1);
+  border-color: #28a745;
+  color: #28a745;
 }
 
-.hud-item.threat-level-2 {
-  border-color: #ff3c3c;
-  color: #ff3c3c;
+.danger.threat-level-2 {
+  background-color: rgba(255, 152, 0, 0.1);
+  border-color: #ff9800;
+  color: #ff9800;
 }
 
-.hud-item.threat-level-3 {
-  border-color: #ff3c3c;
-  color: #ff3c3c;
+.danger.threat-level-3 {
+  background-color: rgba(220, 53, 69, 0.1);
+  border-color: #dc3545;
+  color: #dc3545;
   animation: pulse 1s infinite;
 }
 
-.hud-item.threat-none {
+.danger.threat-none {
+  background-color: rgba(0, 255, 0, 0.1);
   border-color: #00ff00;
   color: #00ff00;
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 5px #ff3c3c; }
-  50% { box-shadow: 0 0 20px #ff3c3c; }
-  100% { box-shadow: 0 0 5px #ff3c3c; }
+  0% { box-shadow: 0 0 5px #dc3545; }
+  50% { box-shadow: 0 0 20px #dc3545; }
+  100% { box-shadow: 0 0 5px #dc3545; }
 }
-</style>
+</style> 
