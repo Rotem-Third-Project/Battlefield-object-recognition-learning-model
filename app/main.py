@@ -22,7 +22,11 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
+<<<<<<< HEAD
 model = YOLO(BASE_DIR / "models" / "best.pt")
+=======
+model = YOLO(BASE_DIR / "models" / "10000_best.pt")
+>>>>>>> bf74bddf7c3a0e22f583c1feff90b9e5a3f2bc25
 
 move_command_queue = []
 action_command_queue = []
