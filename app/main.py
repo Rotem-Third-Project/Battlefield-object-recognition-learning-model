@@ -19,6 +19,7 @@ import threading
 import time
 import os
 
+
 ############################################################
 # 🖼️ 이미지 처리 설정
 ############################################################
@@ -56,6 +57,17 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+
+##########################################################
+# 프론트엔드 리소스 설정
+##########################################################
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 개발 중 전체 허용
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 ############################################################
 # 🧠 상태 변수들
@@ -288,13 +300,3 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
 
-###########################################################
-# 프론트엔드 리소스 설정
-###########################################################
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],  # 개발 중 전체 허용
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
