@@ -10,6 +10,7 @@ module.exports = {
         target: 'http://localhost:5000',
         changeOrigin: true
       },
+      // HEAD 메서드를 지원하는 더미 엔드포인트로 변경
       '/get_status': {
         target: 'http://localhost:5000',
         changeOrigin: true

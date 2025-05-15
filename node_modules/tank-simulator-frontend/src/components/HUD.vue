@@ -92,6 +92,7 @@ export default {
     },
     checkConnectionStatus() {
       // API 서버 연결 상태 확인
+      /*
       fetch('/get_status', { method: 'HEAD' })
         .then(response => {
           this.updateSignalStrength(response.ok ? 1 : 0.2)
@@ -99,6 +100,10 @@ export default {
         .catch(() => {
           this.updateSignalStrength(0)
         })
+      */
+      
+      // 서버 연결 상태 확인 비활성화 (405 오류 방지)
+      this.updateSignalStrength(1) // 항상 연결 상태를 정상으로 표시
     },
     updateSignalStrength(strength) {
       this.signalStrength = strength

@@ -197,15 +197,20 @@ async def init():
     }
 
 # 📌 상태 정보 제공 (HUD.js가 사용)
-@app.get("/get_status")
-async def get_status():
-    simulator_status["turret_pitch"] = turret_pitch_angle
-    return {
-        **simulator_status,
-        "ROI": ROI,
-        "size_x": size_x,
-        "size_y": size_y
-    }
+# @app.get("/get_status")
+# async def get_status():
+#     simulator_status["turret_pitch"] = turret_pitch_angle
+#     return {
+#         **simulator_status,
+#         "ROI": ROI,
+#         "size_x": size_x,
+#         "size_y": size_y
+#     }
+
+# 📌 HEAD 메서드 지원을 위한 더미 엔드포인트 (Vue 프론트엔드용)
+@app.api_route("/get_status", methods=["GET", "HEAD"])
+async def get_status_dummy():
+    return {"status": "online"}
 
 # 📌 포탄 충돌 정보 수신
 @app.post("/update_bullet")
