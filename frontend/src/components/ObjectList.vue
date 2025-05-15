@@ -18,11 +18,11 @@
           </tr>
           <tr v-for="obj in detectedObjects" 
               :key="obj.id" 
-              :class="[getThreatClass(obj.threat), {'selected': selectedObjectId === obj.id}]"
+              :class="[$store.getters.getThreatClass(obj.threat), {'selected': selectedObjectId === obj.id}]"
               @click="selectObject(obj)">
             <td>{{ obj.className }}</td>
             <td>{{ obj.id }}</td>
-            <td :class="getThreatClass(obj.threat)">{{ obj.threat }}</td>
+            <td :class="$store.getters.getThreatClass(obj.threat)">{{ obj.threat }}</td>
             <td class="location-cell">{{ formatLocation(obj.bbox) }}</td>
             <td :class="['priority-cell', `rank-${obj.rank}`]">{{ obj.rank }}</td>
           </tr>
@@ -33,8 +33,7 @@
 </template>
 
 <script>
-// 직접 백엔드 URL 사용
-const API_URL = '/api'
+// 사용되지 않는 API_URL 상수 제거
 
 export default {
   name: 'ObjectList',
@@ -112,10 +111,6 @@ export default {
       const x = Math.round((bbox[0] + bbox[2]) / 2)
       const y = Math.round((bbox[1] + bbox[3]) / 2)
       return `(${x}, ${y})`
-    },
-    getThreatClass(threat) {
-      if (!threat) return 'threat-none'
-      return `threat-${threat.toLowerCase().replace(' ', '-')}`
     },
     selectObject(obj) {
       // 같은 객체를 다시 클릭하면 선택 해제

@@ -48,7 +48,7 @@ export default {
         const imageData = canvas.toDataURL('image/jpeg', 0.75)
         
         try {
-          const response = await fetch('http://localhost:8000/detect_objects', {
+          const response = await fetch('/detect_objects', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: imageData })
