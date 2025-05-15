@@ -1,18 +1,18 @@
-from fastapi import FastAPI, Request, Form, WebSocket
-from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, Request, Form #, WebSocket  # WebSocket은 사용 안 함
+from fastapi.responses import JSONResponse, HTMLResponse #, StreamingResponse  # StreamingResponse는 주석 처리된 video_feed에서만 사용
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from ultralytics import YOLO
+# from ultralytics import YOLO  # YOLO 관련 임포트 주석 처리
 from pathlib import Path
 from datetime import datetime
-from contextlib import asynccontextmanager
+# from contextlib import asynccontextmanager  # 주석 처리된 lifespan에서만 사용
 from utils.network import get_local_ip
-from models.detect import process_image_array
+# from models.detect import process_image_array  # YOLO 객체 감지 함수 주석 처리
 from fastapi.middleware.cors import CORSMiddleware
 
-import tensorflow as tf
+# import tensorflow as tf  # TensorFlow 관련 임포트 주석 처리
 import asyncio
-import mss
+# import mss  # 주석 처리된 capture_loop에서만 사용
 import cv2
 import numpy as np
 import threading
@@ -23,15 +23,44 @@ from PIL import Image
 import base64
 
 ############################################################
+# 🛰️ FastAPI 앱 & 리소스 초기화
+############################################################
+
+BASE_DIR = Path(__file__).resolve().parent
+CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
+# EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # 사용하지 않으므로 주석 처리
+TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
+app = FastAPI()
+
+##########################################################
+# 프론트엔드 리소스 설정 
+##########################################################
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 개발 중 전체 허용
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 프론트엔드 리소스 설정
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+# YOLO 모델 로드 부분 주석 처리
+# yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
+# efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+
+############################################################
 # 🖼️ 이미지 처리 설정
 ############################################################
 
-disp_x, disp_y = 2560, 1440
+# disp_x, disp_y = 2560, 1440  # disp_x, disp_y는 어디에서도 참조되지 않음
 size_x, size_y = 2560, 1440  # 작업표시줄 높이(40px)를 제외한 전체화면 크기
 DESIRED_SIZE = (size_x, size_y)
 
-FPS = 120
-INTERVAL = 1.0 / FPS
+# FPS = 120  # 주석 처리된 코드에서만 사용
+# INTERVAL = 1.0 / FPS  # 주석 처리된 코드에서만 사용
 
 ROI = {
     'top':    0,  # 상단에서 시작
@@ -40,39 +69,22 @@ ROI = {
     'height': size_y  # 작업표시줄을 제외한 세로 크기
 }
 
-capture_q = asyncio.Queue(maxsize=2)
-stream_q = asyncio.Queue(maxsize=2)
-
-############################################################
-# 🛰️ FastAPI 앱 & 리소스 초기화
-############################################################
-
-BASE_DIR = Path(__file__).resolve().parent
-CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
-TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
-app = FastAPI()
-
-# 프론트엔드 리소스 설정
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
-
-yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
-efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+# capture_q = asyncio.Queue(maxsize=2)  # 주석 처리된 코드에서만 사용
+# stream_q = asyncio.Queue(maxsize=2)  # 주석 처리된 코드에서만 사용
 
 ############################################################
 # 🧠 상태 변수들
 ############################################################
 
 move_command_queue = []
-action_command_queue = []
+# action_command_queue = []  # 사용되지 않음
 horizontal_command_queue = []
 vertical_command_queue = []
 bullet_logs = []
 turret_pitch_angle = 0.0
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
-current_position = (60, 27)
+# current_position = (60, 27)  # 사용되지 않음
 last_turret_y = None
 TARGET = 9.42  # 초기값
 
@@ -146,25 +158,30 @@ async def get_detected_objects():
 # 📌 클라이언트 이미지로 객체 감지 (새 POST 엔드포인트)
 @app.post("/detect_objects")
 async def detect_objects_from_client(request: Request):
+    # 클라이언트 측에서 객체 감지를 수행하므로 서버에서는 수신만 처리
     try:
+        print("==== 객체 감지 요청 수신 (클라이언트 처리 방식) ====")
         data = await request.json()
-        image_data = data.get('image').split(',')[1]  # Base64 데이터 추출
-        img = Image.open(io.BytesIO(base64.b64decode(image_data)))
-        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         
-        # detect.py의 process_image_array 호출
-        processed_img = await process_image_array(
-            image=img_cv,
-            yolo_model=yolo_model,
-            efficientnet_model=efficientnet_model,
-            crosshair_path=CROSSHAIR_PATH,
-            tmp_path=TEMP_PATH,
-            detected_objects=detected_objects,
-            horizontal_command_queue=horizontal_command_queue,
-            set_target_callback=set_target
-        )
-        return {"objects": detected_objects}
+        # 클라이언트에서 처리된 객체 데이터 수신
+        if 'objects' in data and isinstance(data['objects'], list):
+            objects = data['objects']
+            detected_objects.clear()
+            detected_objects.extend(objects)
+            print(f"🎯 클라이언트에서 감지된 객체 수: {len(objects)}")
+            if objects:
+                print(f"📋 첫 번째 객체 정보: {objects[0]}")
+            return {"status": "success", "message": f"{len(objects)}개 객체 저장 완료"}
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "ERROR", "message": "유효한 객체 데이터 없음"}
+            )
+            
     except Exception as e:
+        print(f"❌ 객체 데이터 처리 오류: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"status": "ERROR", "message": str(e)}
@@ -317,14 +334,3 @@ if __name__ == "__main__":
     print(f"👉 {DASHBOARD_URL}")
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
-
-##########################################################
-# 프론트엔드 리소스 설정
-##########################################################
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 개발 중 전체 허용
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)

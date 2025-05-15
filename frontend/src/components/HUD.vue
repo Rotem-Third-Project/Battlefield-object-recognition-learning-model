@@ -26,7 +26,6 @@
 </template>
 
 <script>
-
 export default {
   name: 'HUD',
   data() {
@@ -35,53 +34,71 @@ export default {
       threatText: '없음',
       threatClasses: 'threat-none',
       signalStrength: 1,
-      gear: 2,
-      lastUpdateTime: Date.now()
+      gear: 2
+    }
+  },
+  computed: {
+    // Vuex 스토어에서 탐지된 객체 데이터 가져오기
+    storeObjects() {
+      return this.$store.state.detectedObjects || []
+    }
+  },
+  watch: {
+    // 스토어의 객체 목록이 변경될 때마다 위협 수준 업데이트
+    storeObjects: {
+      handler: 'updateThreatLevel',
+      deep: true
     }
   },
   mounted() {
-    this.updateHUD()
-    setInterval(this.updateHUD, 1000)
+    // 초기 위협 레벨 계산
+    this.updateThreatLevel()
+    
+    // 상태 정기 업데이트 (1초마다)
+    setInterval(this.checkConnectionStatus, 1000)
   },
   methods: {
-    async updateHUD() {
-      try {
-        const response = await fetch('/get_detected_objects')
-        if (!response.ok) {
-          this.updateSignalStrength(0)
-          return
-        }
-        
-        const data = await response.json()
-        const objects = data.ranked_objects || []
-        
-        // 위협 레벨 계산
-        const threatLevels = {
-          'LEVEL 3': 3,
-          'LEVEL 2': 2,
-          'LEVEL 1': 1,
-          'Normal': 0
-        }
-        
-        let highestThreat = 'Normal'
-        let highestLevel = 0
-        
-        objects.forEach(obj => {
-          const level = threatLevels[obj.threat] || 0
-          if (level > highestLevel) {
-            highestLevel = level
-            highestThreat = obj.threat
-          }
-        })
-        
-        this.threatText = highestThreat
-        this.threatClasses = this.$store.getters.getThreatClass(highestThreat)
-        this.updateSignalStrength(1)
-        
-      } catch (error) {
-        console.error('HUD 업데이트 중 오류 발생:', error)
-        this.updateSignalStrength(0)
+    updateThreatLevel() {
+      const objects = this.storeObjects
+
+      // 연결 상태 확인
+      if (!Array.isArray(objects) || objects.length === 0) {
+        this.threatText = '없음'
+        this.threatClasses = this.$store.getters.getThreatClass('Normal')
+        return
       }
+
+      // 위협 레벨 계산
+      const threatLevels = {
+        'LEVEL 3': 3,
+        'LEVEL 2': 2,
+        'LEVEL 1': 1,
+        'Normal': 0
+      }
+      
+      let highestThreat = 'Normal'
+      let highestLevel = 0
+      
+      objects.forEach(obj => {
+        const level = threatLevels[obj.threat] || 0
+        if (level > highestLevel) {
+          highestLevel = level
+          highestThreat = obj.threat
+        }
+      })
+      
+      this.threatText = highestThreat
+      this.threatClasses = this.$store.getters.getThreatClass(highestThreat)
+    },
+    checkConnectionStatus() {
+      // API 서버 연결 상태 확인
+      fetch('/get_status', { method: 'HEAD' })
+        .then(response => {
+          this.updateSignalStrength(response.ok ? 1 : 0.2)
+        })
+        .catch(() => {
+          this.updateSignalStrength(0)
+        })
     },
     updateSignalStrength(strength) {
       this.signalStrength = strength
