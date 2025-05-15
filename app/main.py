@@ -239,12 +239,12 @@ async def set_roi(request: Request):
 # 🎯 비동기 캡처 & 인코딩 루프
 ############################################################
 
-async def capture_loop():
-    with mss.mss() as sct:
-        while True:
-            img = sct.grab(ROI.copy())
-            await capture_q.put(img)
-            await asyncio.sleep(INTERVAL)
+# async def capture_loop():
+#     with mss.mss() as sct:
+#         while True:
+#             img = sct.grab(ROI.copy())
+#             await capture_q.put(img)
+#             await asyncio.sleep(INTERVAL)
 
 async def encode_loop():
     while True:
@@ -278,10 +278,10 @@ async def generate_mjpeg():
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         await asyncio.sleep(0)
 
-@app.get("/video_feed")
-async def video_feed():
-    return StreamingResponse(generate_mjpeg(),
-                             media_type='multipart/x-mixed-replace; boundary=frame')
+# @app.get("/video_feed")
+# async def video_feed():
+#     return StreamingResponse(generate_mjpeg(),
+#                              media_type='multipart/x-mixed-replace; boundary=frame')
 
 ############################################################
 # 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
