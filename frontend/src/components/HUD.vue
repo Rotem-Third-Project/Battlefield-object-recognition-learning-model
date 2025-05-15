@@ -48,7 +48,7 @@ export default {
   methods: {
     async updateHUD() {
       try {
-        const response = await fetch('/api/get_detected_objects')
+        const response = await fetch('/get_detected_objects')
         if (!response.ok) {
           this.updateSignalStrength(0)
           return
