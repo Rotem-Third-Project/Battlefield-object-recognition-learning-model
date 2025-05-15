@@ -38,16 +38,16 @@ export default {
   },
   mounted() {
     this.fetchObjects()
-    setInterval(this.fetchObjects, 1000)
+    setInterval(this.fetchObjects, 1000)  // 1초마다 갱신
   },
   methods: {
     async fetchObjects() {
       try {
-        const response = await fetch('http://localhost:8000/detect_objects')
-        const data = await response.json()
-        this.detectedObjects = data.objects
-      } catch (error) {
-        console.error('객체 감지 중 오류 발생:', error)
+        const res = await fetch(`${process.env.VUE_APP_API_URL}/get_detected_objects`)
+        const data = await res.json()
+        this.detectedObjects = data.objects || []
+      } catch (e) {
+        console.error('객체 목록 불러오기 실패:', e)
       }
     }
   }
@@ -114,4 +114,4 @@ export default {
     display: none;
   }
 }
-</style> 
+</style>

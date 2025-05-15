@@ -32,7 +32,7 @@ export default {
   data() {
     return {
       speed: 0,
-      position: '없음',
+      position: 'X:0.0 Y:0.0 Z:0.0',
       health: 100,
       threat: '없음',
       isConnected: true,
@@ -60,16 +60,18 @@ export default {
   methods: {
     async updateStatus() {
       try {
-        const response = await fetch('http://localhost:8000/get_status')
-        const data = await response.json()
+        const res = await fetch(`${process.env.VUE_APP_API_URL}/get_status`)
+        const data = await res.json()
+
         this.speed = data.player_speed
-        this.position = `X:${data.player_pos.x.toFixed(1)} Y:${data.player_pos.y.toFixed(1)} Z:${data.player_pos.z.toFixed(1)}`
         this.health = data.player_health
+        this.gear = data.gear || 2
+        this.position = `X:${data.player_pos.x.toFixed(1)} Y:${data.player_pos.y.toFixed(1)} Z:${data.player_pos.z.toFixed(1)}`
         this.threat = data.threat || '없음'
         this.isConnected = data.is_info_received
         this.signalStrength = this.isConnected ? 4 : 0
-      } catch (error) {
-        console.error('상태 업데이트 중 오류 발생:', error)
+      } catch (e) {
+        console.error('get_status API 오류:', e)
         this.isConnected = false
         this.signalStrength = 0
       }

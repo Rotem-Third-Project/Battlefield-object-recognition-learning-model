@@ -16,7 +16,7 @@ export default {
   name: 'VideoSection',
   data() {
     return {
-      videoFeedUrl: 'http://localhost:8000/video_feed',
+      videoFeedUrl: process.env.VUE_APP_API_URL + "/video_feed",
       distance: '--',
       fps: 0,
       lastFrameTime: 0

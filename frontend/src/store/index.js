@@ -23,7 +23,7 @@ export default createStore({
   actions: {
     async fetchDetectedObjects({ commit }) {
       try {
-        const response = await fetch('http://localhost:8000/detect_objects')
+        const response = await fetch(`${process.env.VUE_APP_API_URL}/get_detected_objects`)
         const data = await response.json()
         commit('setDetectedObjects', data.objects)
       } catch (error) {
