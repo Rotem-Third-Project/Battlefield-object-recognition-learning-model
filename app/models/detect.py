@@ -5,6 +5,7 @@ import cv2
 from pathlib import Path
 from deep_sort_realtime.deepsort_tracker import DeepSort
 import math
+import tensorflow as tf
 
 # DeepSORT 트래커 초기화
 # embedder_gpu=True로 설정 시, PyTorch GPU 버전 및 CUDA 설치 필요. CPU만 사용 시 False로 변경.
@@ -124,9 +125,9 @@ async def process_image_array(
 
         img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
 
-        # YOLOv8으로 객체 탐지
+        # YOLOv8으로 객체 탐지 (GPU에서 실행)
         try:
-            results = list(yolo_model.predict(img_cv, verbose=False, stream=True))
+            results = list(yolo_model.predict(img_cv, verbose=False, stream=True, device="cuda" if tf.config.list_physical_devices('GPU') else "cpu"))
             detections_yolo = results[0].boxes.data.cpu().numpy()
         except Exception as e:
             return JSONResponse(

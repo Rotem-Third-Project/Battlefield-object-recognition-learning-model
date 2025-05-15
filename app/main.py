@@ -4,11 +4,12 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from ultralytics import YOLO
 from pathlib import Path
-from datetime import datetime
 from contextlib import asynccontextmanager
 from utils.network import get_local_ip
 from models.detect import process_image_array
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketDisconnect
+import websockets
 
 import tensorflow as tf
 import asyncio
@@ -20,7 +21,12 @@ import os
 import io
 import base64
 from PIL import Image
-import websockets
+import torch
+from datetime import datetime
+from dotenv import load_dotenv
+
+# 환경 변수 로드
+load_dotenv()
 
 ############################################################
 # 🖼️ 이미지 처리 설정
@@ -40,25 +46,42 @@ ROI = {
     'height': size_y  # 작업표시줄을 제외한 세로 크기
 }
 
-# MJPEG 관련 큐 제거: WebRTC로 대체
-# capture_q = asyncio.Queue(maxsize=2)
-# stream_q = asyncio.Queue(maxsize=2)
-
 ############################################################
 # 🛰️ FastAPI 앱 & 리소스 초기화
 ############################################################
 
-BASE_DIR = Path(__file__).resolve().parent
-CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
+# 프로젝트 기본 경로
+BASE_DIR = Path(__file__).parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+TEMP_PATH = BASE_DIR / "tmp"
+CROSSHAIR_PATH = STATIC_DIR / "crosshair.png"
 EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
-TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
+
+# FastAPI 앱 초기화
 app = FastAPI()
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/tmp", StaticFiles(directory=TEMP_PATH), name="tmp")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# 프론트엔드 리소스 설정
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+# CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
+# GPU 설정
+physical_devices = tf.config.list_physical_devices('GPU')
+if physical_devices:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# 모델 로드
+yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt").to(device)
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
 
 ############################################################
@@ -87,10 +110,10 @@ simulator_status = {
     "distance": 0,
     "is_info_received": False
 }
+
 def set_target(val: float):
     global TARGET
     TARGET = val
-    
 
 ############################################################
 # 🌐 FastAPI 엔드포인트
@@ -136,7 +159,7 @@ async def get_action():
         return vertical_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-# 📌 객체 감지 결과 제공 (기존 GET 엔드포인트)
+# 📌 객체 감지 결과 제공
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {
@@ -149,11 +172,10 @@ async def get_detected_objects():
 async def detect_objects_from_client(request: Request):
     try:
         data = await request.json()
-        image_data = data.get('image').split(',')[1]  # Base64 데이터 추출
+        image_data = data.get('image').split(',')[1]
         img = Image.open(io.BytesIO(base64.b64decode(image_data)))
         img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         
-        # detect.py의 process_image_array 호출
         processed_img = await process_image_array(
             image=img_cv,
             yolo_model=yolo_model,
@@ -164,7 +186,7 @@ async def detect_objects_from_client(request: Request):
             horizontal_command_queue=horizontal_command_queue,
             set_target_callback=set_target
         )
-        # WebRTC 스트림에 반영하기 위해 processed_img를 Base64로 인코딩
+        
         _, buffer = cv2.imencode('.jpg', processed_img)
         processed_image_base64 = base64.b64encode(buffer).decode('utf-8')
         return {
@@ -183,13 +205,11 @@ async def websocket_video(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            # 클라이언트로부터 Base64 이미지 프레임 수신
             data = await websocket.receive_json()
             image_data = data.get('frame').split(',')[1]
             img = Image.open(io.BytesIO(base64.b64decode(image_data)))
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
             
-            # 객체 탐지 및 이미지 처리
             processed_img = await process_image_array(
                 image=img_cv,
                 yolo_model=yolo_model,
@@ -198,21 +218,21 @@ async def websocket_video(websocket: WebSocket):
                 tmp_path=TEMP_PATH,
                 detected_objects=detected_objects,
                 horizontal_command_queue=horizontal_command_queue,
-                set_target_callback=set_target
+                set_target_callback=lambda x: globals().update(target=x)
             )
             
-            # 처리된 이미지를 Base64로 인코딩하여 전송
             _, buffer = cv2.imencode('.jpg', processed_img)
             processed_image_base64 = base64.b64encode(buffer).decode('utf-8')
             await websocket.send_json({
                 "frame": f"data:image/jpeg;base64,{processed_image_base64}",
                 "objects": detected_objects
             })
-            await asyncio.sleep(INTERVAL)
-    except Exception as e:
-        print(f"WebSocket error: {str(e)}")
+            await asyncio.sleep(INTERVAL)  # 120 FPS
+    except WebSocketDisconnect:
+        pass
     finally:
-        await websocket.close()
+        if websocket.client_state == websockets.WebSocketState.CONNECTED:
+            await websocket.close()
 
 # 📌 시뮬레이터 시작 위치
 @app.get("/init")
@@ -223,7 +243,7 @@ async def init():
         "rdStartX": 59, "rdStartY": 10, "rdStartZ": 280
     }
 
-# 📌 상태 정보 제공 (HUD.js가 사용)
+# 📌 상태 정보 제공
 @app.get("/get_status")
 async def get_status():
     simulator_status["turret_pitch"] = turret_pitch_angle
@@ -263,7 +283,7 @@ async def receive_simulator_info(request: Request):
     simulator_status["last_info_time"] = time.time()
     return {"status": "success"}
 
-# 📌 ROI 설정 API (웹에서 ROI 변경 가능)
+# 📌 ROI 설정 API
 @app.post("/set_roi")
 async def set_roi(request: Request):
     global size_x, size_y, DESIRED_SIZE
@@ -279,59 +299,12 @@ async def set_roi(request: Request):
 
     return {"status": "success", "ROI": ROI}
 
-# MJPEG 관련 기능 주석 처리: WebRTC로 대체
-# async def capture_loop():
-#     with mss.mss() as sct:
-#         while True:
-#             img = sct.grab(ROI.copy())
-#             await capture_q.put(img)
-#             await asyncio.sleep(INTERVAL)
-#
-# async def encode_loop():
-#     while True:
-#         sct_img = await capture_q.get()
-#
-#         arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
-#             sct_img.height, sct_img.width, 3)
-#         arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-#
-#         arr = await process_image_array(
-#             image=arr,
-#             yolo_model=yolo_model,
-#             efficientnet_model=efficientnet_model,
-#             crosshair_path=CROSSHAIR_PATH,
-#             tmp_path=TEMP_PATH,
-#             detected_objects=detected_objects,
-#             horizontal_command_queue=horizontal_command_queue,
-#             set_target_callback=set_target
-#         )
-#
-#         small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
-#         _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-#         await stream_q.put(jpeg.tobytes())
-#
-#         await asyncio.sleep(0)
-#
-# async def generate_mjpeg():
-#     while True:
-#         frame = await stream_q.get()
-#         yield (b'--frame\r\n'
-#                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-#         await asyncio.sleep(0)
-#
-# @app.get("/video_feed")
-# async def video_feed():
-#     return StreamingResponse(generate_mjpeg(),
-#                              media_type='multipart/x-mixed-replace; boundary=frame')
-# 이유: WebRTC를 사용하여 실시간 양방향 스트리밍을 구현하므로, MJPEG 기반 단방향 스트리밍은 불필요함.
-
 ############################################################
-# 🔄 lifespan: 서버 시작 시 WebRTC 처리 시작
+# 🔄 lifespan: 서버 시작 시 초기화
 ############################################################
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # capture_loop 및 encode_loop 제거: WebRTC WebSocket에서 프레임 처리
     yield
 
 app.router.lifespan_context = lifespan
@@ -341,7 +314,6 @@ app.router.lifespan_context = lifespan
 ############################################################
 
 SERVER_IP = get_local_ip()
-DASHBOARD_URL = f"http://{SERVER_IP}:8000/dashboard"
 
 def monitor_info_status():
     while True:
@@ -354,17 +326,6 @@ threading.Thread(target=monitor_info_status, daemon=True).start()
 
 if __name__ == "__main__":
     print("🖥️ 대시보드 접속 주소:")
-    print(f"👉 {DASHBOARD_URL}")
+    print(f"👉 http://{SERVER_IP}:8000/dashboard")
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, access_log=False)
-
-##########################################################
-# 프론트엔드 리소스 설정
-##########################################################
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 개발 중 전체 허용
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
