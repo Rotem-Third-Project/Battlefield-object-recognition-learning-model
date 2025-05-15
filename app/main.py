@@ -1,3 +1,6 @@
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 from fastapi import FastAPI, Request, Form, File, UploadFile #, WebSocket  # WebSocket은 사용 안 함
 from fastapi.responses import JSONResponse, HTMLResponse #, StreamingResponse  # StreamingResponse는 주석 처리된 video_feed에서만 사용
 from fastapi.templating import Jinja2Templates
