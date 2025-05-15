@@ -125,8 +125,11 @@ async function updateCrosshair() {
     const cy0 = imgDispH / 2;
     const R0 = Math.min(imgDispW, imgDispH) * 0.07; // 화면에 표시된 이미지 기준 반경
 
+    // A) API 주소 자동 결정
+    const API_BASE_URL = window.API_BASE_URL || "http://192.168.0.127:5000";  // fallback도 포함
+
     // C) 탐지된 객체 조회
-    const response = await fetch("/get_detected_objects");
+    const response = await fetch(`${API_BASE_URL}/get_detected_objects`);
     const { objects } = await response.json();
 
     // 객체 리스트가 1개 이상이면 isDetected = true
@@ -217,7 +220,7 @@ async function updateCrosshair() {
     let distText = "--m";
     if (hasIntersection && bestObj) {
       try {
-        const statusResponse = await fetch("/get_status");
+        const statusResponse = await fetch(`${API_BASE_URL}/get_status`);
         const status = await statusResponse.json();
         distText = `${status.distance.toFixed(2)} m`;
       } catch (err) {
