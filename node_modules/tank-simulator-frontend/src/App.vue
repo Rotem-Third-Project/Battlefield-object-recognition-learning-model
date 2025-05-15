@@ -1,8 +1,19 @@
 <template>
   <div id="app">
     <router-view/>
+    <KeyboardController />
   </div>
 </template>
+
+<script>
+import KeyboardController from './components/KeyboardController.vue'
+
+export default {
+  components: {
+    KeyboardController
+  }
+}
+</script>
 
 <style>
 #app {
