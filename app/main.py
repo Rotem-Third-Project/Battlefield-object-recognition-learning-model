@@ -123,7 +123,6 @@ async def get_move():
 @app.get("/get_action")
 async def get_action():
     global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET
-    print("📡 [get_action] 호출됨")
     if last_turret_y is not None:
         error = TARGET - last_turret_y
         direction = "R" if error > 0 else "F"
@@ -240,62 +239,62 @@ async def set_roi(request: Request):
 # 🎯 비동기 캡처 & 인코딩 루프
 ############################################################
 
-async def capture_loop():
-    with mss.mss() as sct:
-        while True:
-            img = sct.grab(ROI.copy())
-            await capture_q.put(img)
-            await asyncio.sleep(INTERVAL)
+# async def capture_loop():
+#     with mss.mss() as sct:
+#         while True:
+#             img = sct.grab(ROI.copy())
+#             await capture_q.put(img)
+#             await asyncio.sleep(INTERVAL)
 
-async def encode_loop():
-    while True:
-        sct_img = await capture_q.get()
+# async def encode_loop():
+#     while True:
+#         sct_img = await capture_q.get()
 
-        arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
-            sct_img.height, sct_img.width, 3)
-        arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+#         arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
+#             sct_img.height, sct_img.width, 3)
+#         arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
-        arr = await process_image_array(
-            image=arr,
-            yolo_model=yolo_model,
-            efficientnet_model=efficientnet_model,
-            crosshair_path=CROSSHAIR_PATH,
-            tmp_path=TEMP_PATH,
-            detected_objects=detected_objects,
-            horizontal_command_queue=horizontal_command_queue,
-            set_target_callback=set_target
-        )
+#         arr = await process_image_array(
+#             image=arr,
+#             yolo_model=yolo_model,
+#             efficientnet_model=efficientnet_model,
+#             crosshair_path=CROSSHAIR_PATH,
+#             tmp_path=TEMP_PATH,
+#             detected_objects=detected_objects,
+#             horizontal_command_queue=horizontal_command_queue,
+#             set_target_callback=set_target
+#         )
 
-        small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
-        _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-        await stream_q.put(jpeg.tobytes())
+#         small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
+#         _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+#         await stream_q.put(jpeg.tobytes())
 
-        await asyncio.sleep(0)
+#         await asyncio.sleep(0)
 
-async def generate_mjpeg():
-    while True:
-        frame = await stream_q.get()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        await asyncio.sleep(0)
+# async def generate_mjpeg():
+#     while True:
+#         frame = await stream_q.get()
+#         yield (b'--frame\r\n'
+#                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+#         await asyncio.sleep(0)
 
-@app.get("/video_feed")
-async def video_feed():
-    return StreamingResponse(generate_mjpeg(),
-                             media_type='multipart/x-mixed-replace; boundary=frame')
+# @app.get("/video_feed")
+# async def video_feed():
+#     return StreamingResponse(generate_mjpeg(),
+#                              media_type='multipart/x-mixed-replace; boundary=frame')
 
 ############################################################
 # 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
 ############################################################
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # WebRTC로 전환했으므로 capture_loop 비활성화
-    # asyncio.create_task(capture_loop())
-    asyncio.create_task(encode_loop())
-    yield
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # WebRTC로 전환했으므로 capture_loop 비활성화
+#     # asyncio.create_task(capture_loop())
+#     asyncio.create_task(encode_loop())
+#     yield
 
-app.router.lifespan_context = lifespan
+# app.router.lifespan_context = lifespan
 
 ############################################################
 # 🏁 서버 실행 설정

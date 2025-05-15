@@ -9,7 +9,7 @@
       </div>
       <div id="health-text">{{ health }}%</div>
     </div>
-    <div class="hud-item" :class="['danger', threatClass]" id="threat">
+    <div class="hud-item" :class="['danger', threatClasses]" id="threat">
       🚨 위협 감지: {{ threatText }}
     </div>
     <div class="hud-item" id="comm">
@@ -26,8 +26,6 @@
 </template>
 
 <script>
-// 직접 백엔드 URL 사용
-const API_URL = '/api'
 
 export default {
   name: 'HUD',
@@ -35,7 +33,7 @@ export default {
     return {
       health: 100,
       threatText: '없음',
-      threatClass: 'threat-none',
+      threatClasses: 'threat-none',
       signalStrength: 1,
       gear: 2,
       lastUpdateTime: Date.now()
@@ -48,7 +46,7 @@ export default {
   methods: {
     async updateHUD() {
       try {
-        const response = await fetch('/api/get_detected_objects')
+        const response = await fetch('/get_detected_objects')
         if (!response.ok) {
           this.updateSignalStrength(0)
           return
@@ -77,7 +75,7 @@ export default {
         })
         
         this.threatText = highestThreat
-        this.threatClass = `threat-${highestThreat.toLowerCase().replace(' ', '-')}`
+        this.threatClasses = this.$store.getters.getThreatClass(highestThreat)
         this.updateSignalStrength(1)
         
       } catch (error) {

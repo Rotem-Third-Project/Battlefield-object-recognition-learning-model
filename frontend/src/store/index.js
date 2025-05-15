@@ -12,6 +12,13 @@ export default createStore({
       isInfoReceived: false
     }
   },
+  getters: {
+    // 위협 등급에 따른 CSS 클래스명 반환 (중복 코드 제거)
+    getThreatClass: () => (threat) => {
+      if (!threat) return 'threat-none'
+      return `threat-${threat.toLowerCase().replace(' ', '-')}`
+    }
+  },
   mutations: {
     setDetectedObjects(state, objects) {
       state.detectedObjects = objects
@@ -23,7 +30,7 @@ export default createStore({
   actions: {
     async fetchDetectedObjects({ commit }) {
       try {
-        const response = await fetch('http://localhost:8000/detect_objects')
+        const response = await fetch('/detect_objects')
         const data = await response.json()
         commit('setDetectedObjects', data.objects)
       } catch (error) {
