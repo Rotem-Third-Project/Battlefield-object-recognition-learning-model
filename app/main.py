@@ -1,14 +1,20 @@
-from fastapi import FastAPI, Request, Form #, WebSocket  # WebSocket은 사용 안 함
+from fastapi import FastAPI, Request, Form, File, UploadFile #, WebSocket  # WebSocket은 사용 안 함
 from fastapi.responses import JSONResponse, HTMLResponse #, StreamingResponse  # StreamingResponse는 주석 처리된 video_feed에서만 사용
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-# from ultralytics import YOLO  # YOLO 관련 임포트 주석 처리
+from ultralytics import YOLO  # YOLO 관련 임포트 주석 해제
 from pathlib import Path
 from datetime import datetime
 # from contextlib import asynccontextmanager  # 주석 처리된 lifespan에서만 사용
 from utils.network import get_local_ip
-# from models.detect import process_image_array  # YOLO 객체 감지 함수 주석 처리
+from models.detect import process_image_array  # YOLO 객체 감지 함수 주석 해제
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("app.main")
 
 # import tensorflow as tf  # TensorFlow 관련 임포트 주석 처리
 import asyncio
@@ -43,12 +49,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 앱 시작 시 로그
+logger.info("🚀 서버 초기화 중...")
+logger.info(f"📁 작업 디렉토리: {BASE_DIR}")
+logger.info(f"🎯 크로스헤어 경로: {CROSSHAIR_PATH}")
+logger.info(f"💾 임시 파일 경로: {TEMP_PATH}")
+
 # 프론트엔드 리소스 설정
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-# YOLO 모델 로드 부분 주석 처리
-# yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
+# YOLO 모델 로드
+try:
+    logger.info("🔍 YOLO 모델 로드 중...")
+    yolo_model = YOLO(BASE_DIR / "models" / "yolo_weights" / "best.pt")
+    logger.info("✅ YOLO 모델 로드 완료")
+except Exception as e:
+    logger.error(f"❌ YOLO 모델 로드 실패: {str(e)}")
+    import traceback
+    logger.error(traceback.format_exc())
+    # 모델 로드 실패시 None으로 설정
+    yolo_model = None
 # efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
 
 ############################################################
@@ -157,31 +178,59 @@ async def get_detected_objects():
 
 # 📌 클라이언트 이미지로 객체 감지 (새 POST 엔드포인트)
 @app.post("/detect_objects")
-async def detect_objects_from_client(request: Request):
-    # 클라이언트 측에서 객체 감지를 수행하므로 서버에서는 수신만 처리
+async def detect_objects_from_client(image: UploadFile = File(...)):
     try:
-        print("==== 객체 감지 요청 수신 (클라이언트 처리 방식) ====")
-        data = await request.json()
+        logger.info("==== 객체 감지 요청 수신 (서버 처리 방식) ====")
+        start_time = time.time()
         
-        # 클라이언트에서 처리된 객체 데이터 수신
-        if 'objects' in data and isinstance(data['objects'], list):
-            objects = data['objects']
-            detected_objects.clear()
-            detected_objects.extend(objects)
-            print(f"🎯 클라이언트에서 감지된 객체 수: {len(objects)}")
-            if objects:
-                print(f"📋 첫 번째 객체 정보: {objects[0]}")
-            return {"status": "success", "message": f"{len(objects)}개 객체 저장 완료"}
-        else:
+        # 이미지 데이터 읽기
+        image_bytes = await image.read()
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        
+        if img_cv is None or img_cv.size == 0:
+            logger.error("유효하지 않은 이미지 데이터 수신")
             return JSONResponse(
                 status_code=400,
-                content={"status": "ERROR", "message": "유효한 객체 데이터 없음"}
+                content={"status": "ERROR", "message": "유효하지 않은 이미지 데이터"}
             )
             
+        # 이미지 정보 로깅
+        logger.info(f"📊 입력 이미지 크기: {img_cv.shape}, 데이터 크기: {len(image_bytes)} bytes")
+        
+        if yolo_model is None:
+            logger.error("YOLO 모델이 로드되지 않았습니다.")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "ERROR", "message": "YOLO 모델이 초기화되지 않았습니다."}
+            )
+        
+        # YOLO 모델로 객체 감지 수행
+        results = await process_image_array(
+            image=img_cv,
+            yolo_model=yolo_model,
+            efficientnet_model=None,
+            crosshair_path=CROSSHAIR_PATH,
+            tmp_path=TEMP_PATH,
+            detected_objects=detected_objects,
+            horizontal_command_queue=horizontal_command_queue,
+            set_target_callback=set_target
+        )
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"⏱️ 총 처리 시간: {elapsed_time:.4f}초")
+        logger.info(f"🎯 감지된 객체 수: {len(detected_objects)}")
+        
+        if detected_objects:
+            logger.info(f"📋 첫 번째 객체 정보: {detected_objects[0]}")
+            
+        # 객체 정보 JSON으로 반환
+        return {"status": "success", "objects": detected_objects, "process_time_ms": int(elapsed_time * 1000)}
+            
     except Exception as e:
-        print(f"❌ 객체 데이터 처리 오류: {str(e)}")
+        logger.error(f"❌ 객체 감지 오류: {str(e)}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
             content={"status": "ERROR", "message": str(e)}

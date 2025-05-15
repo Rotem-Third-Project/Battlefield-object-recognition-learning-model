@@ -21,7 +21,8 @@ export default createStore({
   },
   mutations: {
     setDetectedObjects(state, objects) {
-      state.detectedObjects = objects
+      // 서버에서 받은 객체 데이터를 그대로 저장
+      state.detectedObjects = objects || [];
     },
     updateSimulatorStatus(state, status) {
       state.simulatorStatus = { ...state.simulatorStatus, ...status }
@@ -30,11 +31,14 @@ export default createStore({
   actions: {
     async fetchDetectedObjects({ commit }) {
       try {
-        const response = await fetch('/detect_objects')
-        const data = await response.json()
-        commit('setDetectedObjects', data.objects)
+        const response = await fetch('/get_detected_objects');
+        const data = await response.json();
+        if (data.objects) {
+          commit('setDetectedObjects', data.objects);
+        }
       } catch (error) {
-        console.error('객체 감지 중 오류 발생:', error)
+        console.error('객체 감지 데이터 가져오기 실패:', error);
+        commit('setDetectedObjects', []);
       }
     },
     async updateStatus({ commit }, status) {

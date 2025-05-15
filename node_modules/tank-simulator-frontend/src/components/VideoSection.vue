@@ -29,14 +29,6 @@
       <div v-if="captureStatus === 'error'" class="status-indicator error">
         <span>오류 발생!</span>
       </div>
-      
-      <!-- 디버깅 정보 표시 -->
-      <div class="debug-panel">
-        <p>비디오 크기: {{ videoWidth }}x{{ videoHeight }}</p>
-        <p>스케일 X: {{ scaleFactorX.toFixed(4) }}, Y: {{ scaleFactorY.toFixed(4) }}</p>
-        <p>감지된 객체: {{ objectCount }}</p>
-        <p>Viewport: {{ viewportWidth }}x{{ viewportHeight }}</p>
-      </div>
     </div>
   </div>
 </template>
@@ -58,8 +50,8 @@ export default {
       videoHeight: 720,
       scaleFactorX: 1,
       scaleFactorY: 1,
-      originalWidth: 640, // 감지에 사용된 크기 (YOLO 입력 크기)
-      originalHeight: 640,
+      originalWidth: 1280, // 원래 입력 크기로 변경
+      originalHeight: 720,
       captureStatus: 'idle', // 'idle', 'sending', 'success', 'error'
       scaleUpdateInterval: null,
       objectCount: 0,
@@ -151,9 +143,9 @@ export default {
       if (displayWidth === 0 || displayHeight === 0) return
       
       // 새로운 스케일 계산 (표시 크기 / 원본 크기)
-      // 올바른 스케일 계산을 위해 YOLO 입력 크기인 640x640을 기준으로 계산
-      const newScaleX = displayWidth / this.videoWidth;
-      const newScaleY = displayHeight / this.videoHeight;
+      // YOLO 입력 크기(originalWidth/originalHeight)를 기준으로 계산하도록 수정
+      const newScaleX = displayWidth / this.originalWidth;
+      const newScaleY = displayHeight / this.originalHeight;
       
       // 스케일이 변경된 경우에만 업데이트
       if (Math.abs(this.scaleFactorX - newScaleX) > 0.0005 || 
@@ -241,24 +233,6 @@ video { /* video 스타일링 */
   background-color: rgba(255, 0, 0, 0.7);
   color: white;
   animation: pulse 1s infinite;
-}
-
-/* 디버깅 패널 */
-.debug-panel {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #00ff00;
-  padding: 10px;
-  border-radius: 5px;
-  font-family: monospace;
-  font-size: 12px;
-  z-index: 100;
-}
-
-.debug-panel p {
-  margin: 5px 0;
 }
 
 @keyframes pulse {

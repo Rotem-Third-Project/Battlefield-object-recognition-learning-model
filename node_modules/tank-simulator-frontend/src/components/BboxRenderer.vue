@@ -50,6 +50,8 @@ export default {
       ctx: null,
       animationFrameId: null,
       lastObjectsCount: 0,
+      lastRenderedObjects: null, // 마지막으로 렌더링된 객체 상태 저장
+      lastRenderTime: 0, // 마지막 렌더링 타임스탬프
       colors: {
         'enemy': '#ff0000',   // 적군 - 빨강
         'car': '#00ff00',     // 차량 - 초록
@@ -174,23 +176,35 @@ export default {
     },
     
     startRenderLoop() {
-      // 애니메이션 프레임 사용하여 지속적 렌더링
+      // 애니메이션 프레임 사용하여 최적화된 렌더링
       const render = () => {
         try {
-          // 객체가 있으면 그리기
-          if (this.detectedObjects && this.detectedObjects.length > 0) {
-            this.drawBboxes()
+          const now = performance.now();
+          const objects = this.detectedObjects;
+          
+          // 객체의 변경 여부 확인 (최적화)
+          const shouldRender = this.shouldRenderFrame(objects, now);
+          
+          // 변경된 경우에만 다시 그리기
+          if (shouldRender) {
+            this.drawBboxes();
+            this.lastRenderedObjects = JSON.stringify(objects);
+            this.lastRenderTime = now;
+            
+            if (this.debugMode) {
+              console.log(`🔄 Bbox 다시 그리기: ${objects.length}개 객체`);
+            }
           }
           
           // 다음 프레임 요청
-          this.animationFrameId = requestAnimationFrame(render)
+          this.animationFrameId = requestAnimationFrame(render);
         } catch (error) {
-          console.error('렌더링 루프 오류:', error)
-          this.renderError = error.message
+          console.error('렌더링 루프 오류:', error);
+          this.renderError = error.message;
         }
-      }
+      };
       
-      this.animationFrameId = requestAnimationFrame(render)
+      this.animationFrameId = requestAnimationFrame(render);
     },
     
     stopRenderLoop() {
@@ -298,6 +312,29 @@ export default {
       // 라벨 텍스트
       this.ctx.fillStyle = textColor
       this.ctx.fillText(text, x + padding, y + 15)
+    },
+    
+    // 최적화: 프레임 렌더링 필요 여부 판단
+    shouldRenderFrame(objects, now) {
+      // 첫 번째 렌더링이거나 이전 렌더링 정보가 없는 경우
+      if (!this.lastRenderedObjects) {
+        return true;
+      }
+      
+      // 60fps 기준으로 16ms마다 렌더링 (고성능 렌더링 원할 경우)
+      // const timeSinceLastRender = now - this.lastRenderTime;
+      // if (timeSinceLastRender > 100) { // 100ms마다 렌더링 (초당 10회)
+      //   return true;
+      // }
+      
+      // 객체 수가 변경된 경우
+      if (objects.length !== JSON.parse(this.lastRenderedObjects).length) {
+        return true;
+      }
+      
+      // 객체 내용이 변경된 경우 (JSON 문자열 비교)
+      const currentObjectsStr = JSON.stringify(objects);
+      return currentObjectsStr !== this.lastRenderedObjects;
     }
   },
   beforeDestroy() {

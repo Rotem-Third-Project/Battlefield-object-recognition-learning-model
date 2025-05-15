@@ -8,8 +8,6 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "^4.16.0",
-    "onnxruntime-web": "^1.16.0"
   },
   "devDependencies": {}
 }
