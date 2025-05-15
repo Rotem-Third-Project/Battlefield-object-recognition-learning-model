@@ -10,7 +10,8 @@ export default createStore({
       enemyHealth: 100,
       distance: 0,
       isInfoReceived: false
-    }
+    },
+    gear: 2
   },
   mutations: {
     setDetectedObjects(state, objects) {
@@ -18,6 +19,9 @@ export default createStore({
     },
     updateSimulatorStatus(state, status) {
       state.simulatorStatus = { ...state.simulatorStatus, ...status }
+    },
+    updateGear(state, gear) {
+      state.gear = gear
     }
   },
   actions: {

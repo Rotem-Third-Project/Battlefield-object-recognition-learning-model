@@ -123,7 +123,6 @@ async def get_move():
 @app.get("/get_action")
 async def get_action():
     global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET
-    print("📡 [get_action] 호출됨")
     if last_turret_y is not None:
         error = TARGET - last_turret_y
         direction = "R" if error > 0 else "F"

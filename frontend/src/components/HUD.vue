@@ -20,7 +20,7 @@
       </div>
     </div>
     <div class="hud-item" id="gear">
-      🔧 기어: <span id="gear-level">{{ gear }}</span>
+      🔧 기어: <span id="gear-level">{{ $store.state.gear }}</span>
     </div>
   </div>
 </template>
@@ -37,7 +37,6 @@ export default {
       threatText: '없음',
       threatClass: 'threat-none',
       signalStrength: 1,
-      gear: 2,
       lastUpdateTime: Date.now()
     }
   },
