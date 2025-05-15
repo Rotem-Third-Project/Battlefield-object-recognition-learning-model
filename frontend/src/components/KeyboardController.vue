@@ -75,7 +75,6 @@ export default {
 
       fetch(`${API_BASE_URL}/input_key`, {
         method: "POST",
-        // CORS 헤더 제거 - 상대 경로 사용 시 불필요
         body: formData,
         credentials: 'same-origin'
       })
@@ -97,9 +96,8 @@ export default {
       formData.append("turret", "FIRE");
       formData.append("weight", "1.0");
 
-      fetch(`${API_BASE_URL}/send_action`, {
+      fetch(`${API_BASE_URL}/get_action`, {
         method: "POST",
-        // CORS 헤더 제거 - 상대 경로 사용 시 불필요
         body: formData,
         credentials: 'same-origin'
       })
@@ -108,9 +106,9 @@ export default {
         })
         .catch((err) => {
           console.warn("공격 명령 전송 실패:", err);
-          console.log("요청 URL:", `${API_BASE_URL}/send_action`);
+          console.log("요청 URL:", `${API_BASE_URL}/get_action`);
         });
     }
   }
 }
-</script> 
+</script>

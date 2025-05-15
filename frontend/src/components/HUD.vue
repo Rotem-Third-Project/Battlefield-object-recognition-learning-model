@@ -1,4 +1,3 @@
-
 <template>
   <div class="hud">
     <div class="hud-item" id="speed">속도: {{ speed }} km/h</div>

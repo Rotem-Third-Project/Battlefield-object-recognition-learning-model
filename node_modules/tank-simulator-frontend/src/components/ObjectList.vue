@@ -14,12 +14,12 @@
         </thead>
         <tbody>
           <tr v-for="obj in detectedObjects" :key="obj.id">
-            <td>{{ obj.class }}</td>
+            <td>{{ obj.className }}</td>
             <td>{{ obj.id }}</td>
-            <td>{{ obj.threat_level }}</td>
-            <td class="location-cell">{{ obj.location }}</td>
-            <td :class="['priority-cell', `rank-${obj.priority}`]">
-              {{ obj.priority }}
+            <td>{{ obj.threat }}</td>
+            <td class="location-cell">{{ `(${obj.bbox[0]}, ${obj.bbox[1]})` }}</td>
+            <td :class="['priority-cell', `rank-${obj.rank}`]">
+              {{ obj.rank }}
             </td>
           </tr>
         </tbody>
@@ -31,24 +31,9 @@
 <script>
 export default {
   name: 'ObjectList',
-  data() {
-    return {
-      detectedObjects: []
-    }
-  },
-  mounted() {
-    this.fetchObjects()
-    setInterval(this.fetchObjects, 1000)
-  },
-  methods: {
-    async fetchObjects() {
-      try {
-        const response = await fetch('http://localhost:8000/detect_objects')
-        const data = await response.json()
-        this.detectedObjects = data.objects
-      } catch (error) {
-        console.error('객체 감지 중 오류 발생:', error)
-      }
+  computed: {
+    detectedObjects() {
+      return this.$store.state.detectedObjects
     }
   }
 }

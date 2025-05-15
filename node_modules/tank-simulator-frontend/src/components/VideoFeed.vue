@@ -1,3 +1,4 @@
+<!--
 <template>
   <div class="video-feed">
     <video ref="videoElement" autoplay></video>
@@ -39,3 +40,5 @@ video {
   border-radius: 4px;
 }
 </style>
+-->
+<!-- 이유: WebRTC 기반 스트리밍은 VideoSection.vue에서 처리하며, MJPEG 기반 video_feed는 사용되지 않음. -->

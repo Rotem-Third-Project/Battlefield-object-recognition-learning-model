@@ -25,17 +25,24 @@ export default createStore({
     }
   },
   actions: {
-    async fetchDetectedObjects({ commit }) {
+    async updateStatus({ commit }) {
       try {
-        const response = await fetch('http://localhost:8000/detect_objects')
+        const response = await fetch('http://localhost:8000/get_status')
         const data = await response.json()
-        commit('setDetectedObjects', data.objects)
+        commit('updateSimulatorStatus', data)
       } catch (error) {
-        console.error('객체 감지 중 오류 발생:', error)
+        console.error('상태 업데이트 중 오류 발생:', error)
       }
-    },
-    async updateStatus({ commit }, status) {
-      commit('updateSimulatorStatus', status)
     }
+    // fetchDetectedObjects 제거: WebSocket(/ws/video)을 통해 detectedObjects가 실시간 업데이트됨
+    // async fetchDetectedObjects({ commit }) {
+    //   try {
+    //     const response = await fetch('http://localhost:8000/detect_objects')
+    //     const data = await response.json()
+    //     commit('setDetectedObjects', data.objects)
+    //   } catch (error) {
+    //     console.error('객체 감지 중 오류 발생:', error)
+    //   }
+    // }
   }
 })

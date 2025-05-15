@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, WebSocket
-from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from ultralytics import YOLO
@@ -12,15 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import tensorflow as tf
 import asyncio
-import mss
 import cv2
 import numpy as np
 import threading
 import time
 import os
 import io
-from PIL import Image
 import base64
+from PIL import Image
+import websockets
 
 ############################################################
 # 🖼️ 이미지 처리 설정
@@ -40,8 +40,9 @@ ROI = {
     'height': size_y  # 작업표시줄을 제외한 세로 크기
 }
 
-capture_q = asyncio.Queue(maxsize=2)
-stream_q = asyncio.Queue(maxsize=2)
+# MJPEG 관련 큐 제거: WebRTC로 대체
+# capture_q = asyncio.Queue(maxsize=2)
+# stream_q = asyncio.Queue(maxsize=2)
 
 ############################################################
 # 🛰️ FastAPI 앱 & 리소스 초기화
@@ -143,7 +144,7 @@ async def get_detected_objects():
         "objects": detected_objects
     }
 
-# 📌 클라이언트 이미지로 객체 감지 (새 POST 엔드포인트)
+# 📌 클라이언트 이미지로 객체 감지
 @app.post("/detect_objects")
 async def detect_objects_from_client(request: Request):
     try:
@@ -163,12 +164,55 @@ async def detect_objects_from_client(request: Request):
             horizontal_command_queue=horizontal_command_queue,
             set_target_callback=set_target
         )
-        return {"objects": detected_objects}
+        # WebRTC 스트림에 반영하기 위해 processed_img를 Base64로 인코딩
+        _, buffer = cv2.imencode('.jpg', processed_img)
+        processed_image_base64 = base64.b64encode(buffer).decode('utf-8')
+        return {
+            "objects": detected_objects,
+            "processed_image": f"data:image/jpeg;base64,{processed_image_base64}"
+        }
     except Exception as e:
         return JSONResponse(
             status_code=500,
             content={"status": "ERROR", "message": str(e)}
         )
+
+# 📌 WebRTC WebSocket 엔드포인트
+@app.websocket("/ws/video")
+async def websocket_video(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            # 클라이언트로부터 Base64 이미지 프레임 수신
+            data = await websocket.receive_json()
+            image_data = data.get('frame').split(',')[1]
+            img = Image.open(io.BytesIO(base64.b64decode(image_data)))
+            img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+            
+            # 객체 탐지 및 이미지 처리
+            processed_img = await process_image_array(
+                image=img_cv,
+                yolo_model=yolo_model,
+                efficientnet_model=efficientnet_model,
+                crosshair_path=CROSSHAIR_PATH,
+                tmp_path=TEMP_PATH,
+                detected_objects=detected_objects,
+                horizontal_command_queue=horizontal_command_queue,
+                set_target_callback=set_target
+            )
+            
+            # 처리된 이미지를 Base64로 인코딩하여 전송
+            _, buffer = cv2.imencode('.jpg', processed_img)
+            processed_image_base64 = base64.b64encode(buffer).decode('utf-8')
+            await websocket.send_json({
+                "frame": f"data:image/jpeg;base64,{processed_image_base64}",
+                "objects": detected_objects
+            })
+            await asyncio.sleep(INTERVAL)
+    except Exception as e:
+        print(f"WebSocket error: {str(e)}")
+    finally:
+        await websocket.close()
 
 # 📌 시뮬레이터 시작 위치
 @app.get("/init")
@@ -235,63 +279,59 @@ async def set_roi(request: Request):
 
     return {"status": "success", "ROI": ROI}
 
-############################################################
-# 🎯 비동기 캡처 & 인코딩 루프
-############################################################
-
+# MJPEG 관련 기능 주석 처리: WebRTC로 대체
 # async def capture_loop():
 #     with mss.mss() as sct:
 #         while True:
 #             img = sct.grab(ROI.copy())
 #             await capture_q.put(img)
 #             await asyncio.sleep(INTERVAL)
-
-async def encode_loop():
-    while True:
-        sct_img = await capture_q.get()
-
-        arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
-            sct_img.height, sct_img.width, 3)
-        arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-
-        arr = await process_image_array(
-            image=arr,
-            yolo_model=yolo_model,
-            efficientnet_model=efficientnet_model,
-            crosshair_path=CROSSHAIR_PATH,
-            tmp_path=TEMP_PATH,
-            detected_objects=detected_objects,
-            horizontal_command_queue=horizontal_command_queue,
-            set_target_callback=set_target
-        )
-
-        small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
-        _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-        await stream_q.put(jpeg.tobytes())
-
-        await asyncio.sleep(0)
-
-async def generate_mjpeg():
-    while True:
-        frame = await stream_q.get()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        await asyncio.sleep(0)
-
+#
+# async def encode_loop():
+#     while True:
+#         sct_img = await capture_q.get()
+#
+#         arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
+#             sct_img.height, sct_img.width, 3)
+#         arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+#
+#         arr = await process_image_array(
+#             image=arr,
+#             yolo_model=yolo_model,
+#             efficientnet_model=efficientnet_model,
+#             crosshair_path=CROSSHAIR_PATH,
+#             tmp_path=TEMP_PATH,
+#             detected_objects=detected_objects,
+#             horizontal_command_queue=horizontal_command_queue,
+#             set_target_callback=set_target
+#         )
+#
+#         small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
+#         _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+#         await stream_q.put(jpeg.tobytes())
+#
+#         await asyncio.sleep(0)
+#
+# async def generate_mjpeg():
+#     while True:
+#         frame = await stream_q.get()
+#         yield (b'--frame\r\n'
+#                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+#         await asyncio.sleep(0)
+#
 # @app.get("/video_feed")
 # async def video_feed():
 #     return StreamingResponse(generate_mjpeg(),
 #                              media_type='multipart/x-mixed-replace; boundary=frame')
+# 이유: WebRTC를 사용하여 실시간 양방향 스트리밍을 구현하므로, MJPEG 기반 단방향 스트리밍은 불필요함.
 
 ############################################################
-# 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
+# 🔄 lifespan: 서버 시작 시 WebRTC 처리 시작
 ############################################################
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # WebRTC로 전환했으므로 capture_loop 비활성화
-    # asyncio.create_task(capture_loop())
-    asyncio.create_task(encode_loop())
+    # capture_loop 및 encode_loop 제거: WebRTC WebSocket에서 프레임 처리
     yield
 
 app.router.lifespan_context = lifespan
@@ -301,7 +341,7 @@ app.router.lifespan_context = lifespan
 ############################################################
 
 SERVER_IP = get_local_ip()
-DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
+DASHBOARD_URL = f"http://{SERVER_IP}:8000/dashboard"
 
 def monitor_info_status():
     while True:
@@ -316,7 +356,7 @@ if __name__ == "__main__":
     print("🖥️ 대시보드 접속 주소:")
     print(f"👉 {DASHBOARD_URL}")
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=8000, access_log=False)
 
 ##########################################################
 # 프론트엔드 리소스 설정

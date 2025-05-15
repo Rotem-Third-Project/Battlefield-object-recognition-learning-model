@@ -1,3 +1,4 @@
+<!--
 <template>
   <div class="crosshair-container">
     <canvas ref="crosshairCanvas"></canvas>
@@ -57,4 +58,6 @@ canvas {
   width: 100px;
   height: 100px;
 }
-</style> 
+</style>
+-->
+<!-- 이유: VideoSection.vue에서 이미 조준선을 그리고 있으며, 별도의 CrosshairCanvas.vue는 중복되고 불필요함. -->
