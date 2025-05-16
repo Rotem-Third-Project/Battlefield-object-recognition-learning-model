@@ -212,12 +212,7 @@ async def detect_objects_from_client(image: UploadFile = File(...)):
         results = await process_image_array(
             image=img_cv,
             yolo_model=yolo_model,
-            efficientnet_model=None,
-            crosshair_path=CROSSHAIR_PATH,
-            tmp_path=TEMP_PATH,
             detected_objects=detected_objects,
-            horizontal_command_queue=horizontal_command_queue,
-            set_target_callback=set_target
         )
         
         elapsed_time = time.time() - start_time
