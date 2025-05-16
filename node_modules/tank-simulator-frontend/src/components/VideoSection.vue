@@ -22,6 +22,9 @@
         :debug-mode="true"
       />
 
+      <!-- 조준점 표시 -->
+      <CrosshairCanvas v-if="videoMounted" />
+
       <!-- 로딩/에러 인디케이터 -->
       <div v-if="captureStatus === 'sending'" class="status-indicator loading">
         <span>처리 중...</span>
@@ -36,12 +39,14 @@
 <script>
 import FrameCapture from '@/components/FrameCapture.vue'
 import BboxRenderer from '@/components/BboxRenderer.vue'
+import CrosshairCanvas from '@/components/CrosshairCanvas.vue'
 
 export default {
   name: 'VideoSection',
   components: {
     FrameCapture,
-    BboxRenderer
+    BboxRenderer,
+    CrosshairCanvas
   },
   data() {
     return {
@@ -208,7 +213,7 @@ video { /* video 스타일링 */
   height: auto;
   display: block;
   border: 2px solid #00ff00;
-  margin: 1rem 0;
+  margin: -1.5rem 0 2rem 0;
   box-shadow: 0 0 10px #00ff00;
 }
 
