@@ -24,6 +24,10 @@ export default {
     quality: {
       type: Number,
       default: 0.85 // 기본 이미지 품질 (0.0-1.0)
+    },
+    serverUrl: {
+      type: String,
+      default: '' // 서버 URL (비어있으면 상대 경로 사용)
     }
   },
   data() {
@@ -33,7 +37,10 @@ export default {
       canvas: null,
       ctx: null,
       lastCaptureTime: 0, // 마지막 캡처 시간 추적용 변수 추가
-      isProcessing: false // 프레임 처리 중 여부를 추적
+      isProcessing: false, // 프레임 처리 중 여부를 추적
+      apiUrl: '/detect_objects', // 기본 API 경로
+      connectionAttempts: 0,
+      maxRetries: 3
     }
   },
   async mounted() {
@@ -107,15 +114,58 @@ export default {
         
         const startTime = performance.now();
         
-        // 서버에 이미지 전송
-        const response = await fetch('/detect_objects', {
+        // 호스트 IP 주소 가져오기 (배포 환경에 따라 조정 필요)
+        let baseUrl = '';
+        
+        // 네트워크 환경에 따라 API URL 설정 (백엔드 서버 URL)
+        if (this.serverUrl) {
+          // 서버 URL이 전달된 경우 그대로 사용
+          baseUrl = this.serverUrl;
+        } else {
+          // 동적으로 서버 URL 구성
+          const hostname = window.location.hostname; // 현재 호스트 이름
+          
+          // 로컬 환경인 경우 localhost 사용, 그렇지 않으면 현재 호스트 IP 사용
+          if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            baseUrl = 'http://localhost:5000';
+          } else {
+            // 현재 호스트와 동일한 IP를 가진 서버의 5000번 포트로 요청
+            baseUrl = `http://${hostname}:5000`;
+          }
+        }
+        
+        // API 엔드포인트 URL 구성
+        const url = `${baseUrl}/detect_objects`;
+        
+        console.log(`📡 API 요청 URL: ${url}`);
+        
+        // 서버에 이미지 전송 (직접 요청 방식)
+        const response = await fetch(url, {
           method: 'POST',
-          body: formData // multipart/form-data로 전송
+          body: formData, // multipart/form-data로 전송
+          headers: {
+            'Accept': 'application/json'
+          },
+          mode: 'cors',
+          credentials: 'omit'
         });
         
         if (!response.ok) {
-          throw new Error(`서버 오류: ${response.status}`);
+          this.connectionAttempts++;
+          const errorMsg = `서버 오류: ${response.status}`;
+          console.warn(`⚠️ API 요청 실패 (시도 ${this.connectionAttempts}/${this.maxRetries}): ${errorMsg}`);
+          
+          if (this.connectionAttempts >= this.maxRetries) {
+            throw new Error(errorMsg);
+          } else {
+            // 다음 요청에서 자동으로 다시 시도될 예정
+            this.$emit('capture-status', 'error');
+            return;
+          }
         }
+        
+        // 재시도 카운터 초기화
+        this.connectionAttempts = 0;
         
         const data = await response.json();
         const elapsedTime = performance.now() - startTime;
