@@ -120,7 +120,6 @@ simulator_status = {
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
-    "is_info_received": False
 }
 def set_target(val: float):
     global TARGET
@@ -278,14 +277,20 @@ async def get_logs():
 async def receive_simulator_info(request: Request):
     global simulator_status, last_turret_y
     data = await request.json()
-    last_turret_y = data.get("playerTurretY")
+
+    ## 사용자 정보
+    last_turret_y = data.get("playerTurretY",last_turret_y) # 이 부분 수정했습니다~
     simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
     simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
+    simulator_status["player_turret_x"] = data.get("playerTurretX", simulator_status["player_turret_x"])
+    simulator_status["player_turret_y"] = last_turret_y
+
+    ## 적 정보
     simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
+
+    ## 거리 정보
     simulator_status["distance"] = data.get("distance", simulator_status["distance"])
-    simulator_status["is_info_received"] = True
-    simulator_status["last_info_time"] = time.time()
     return {"status": "success"}
 
 # 📌 ROI 설정 API (웹에서 ROI 변경 가능)
@@ -371,15 +376,6 @@ async def set_roi(request: Request):
 
 SERVER_IP = get_local_ip()
 DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
-
-def monitor_info_status():
-    while True:
-        last_time = simulator_status.get("last_info_time", 0)
-        if time.time() - last_time > 3:
-            simulator_status["is_info_received"] = False
-        time.sleep(1)
-
-threading.Thread(target=monitor_info_status, daemon=True).start()
 
 if __name__ == "__main__":
     print("🖥️ 대시보드 접속 주소:")
