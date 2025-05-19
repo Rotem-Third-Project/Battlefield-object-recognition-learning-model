@@ -85,7 +85,7 @@ export default {
 <style scoped>
 .object-list-section {
   width: 100%;
-  height: 100%;
+  height: 50%;
   max-height: 100%;
   overflow-y: auto;
   background-color: rgba(0, 255, 0, 0.05);

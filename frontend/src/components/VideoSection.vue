@@ -1,43 +1,27 @@
 <template>
-  <div class="video-section">
-    <div class="video-wrapper" ref="videoWrapper">
-      <video ref="videoElement" autoplay muted @loadedmetadata="onVideoMetadata"></video> <!-- 메타데이터 로드 이벤트 추가 -->
+  <div class="video-section relative">
+    <div class="video-wrapper relative" ref="videoWrapper">
       
-      <!-- 비디오 요소가 마운트된 후 FrameCapture 컴포넌트 사용 -->
-      <FrameCapture 
-        v-if="videoMounted"
-        :video-element="$refs.videoElement"
-        @frame-processed="onFrameProcessed" 
-        @capture-status="onCaptureStatus"
-        :server-url="apiServerUrl"
+      <!-- ✅ 비디오 -->
+      <video
+        ref="videoElement"
+        autoplay
+        muted
+        @loadedmetadata="onVideoMetadata"
+        class="w-full h-auto"
       />
-      
-      <!-- 객체 감지 결과(bbox) 표시 -->
-      <BboxRenderer 
-        v-if="videoMounted"
-        ref="bboxRenderer"
-        :width="videoWidth"
-        :height="videoHeight"
-        :scale-x="scaleFactorX"
-        :scale-y="scaleFactorY"
-        :debug-mode="true"
-      />
+      <StatusHUD /> 
 
-      <!-- 조준점 표시 -->
-      <CrosshairCanvas v-if="videoMounted" />
+      <!-- 👇 기존 컴포넌트들 -->
+      <FrameCapture v-if="videoMounted" :video-element="$refs.videoElement" @frame-processed="onFrameProcessed" @capture-status="onCaptureStatus" :server-url="apiServerUrl" />
+      <BboxRenderer v-if="videoMounted && showDetections" ref="bboxRenderer" :width="videoWidth" :height="videoHeight" :scale-x="scaleFactorX" :scale-y="scaleFactorY" :debug-mode="true" />
+      <CrosshairCanvas v-if="videoMounted && showCrosshair" />
 
-      <!-- 로딩/에러 인디케이터 -->
-      <div v-if="captureStatus === 'sending'" class="status-indicator loading">
-        <span>처리 중...</span>
-      </div>
-      <div v-if="captureStatus === 'error'" class="status-indicator error">
-        <span>오류 발생!</span>
-      </div>
-      
-      <!-- 화면 공유 오류 메시지 -->
+      <div v-if="captureStatus === 'sending'" class="status-indicator loading">처리 중...</div>
+      <div v-if="captureStatus === 'error'" class="status-indicator error">오류 발생!</div>
+
       <div v-if="!videoMounted" class="screen-share-error">
         <h3>화면 공유가 필요합니다</h3>
-        <p>아래 버튼을 클릭하여 화면 공유를 시작하세요.</p>
         <p>{{ shareErrorMessage }}</p>
         <button @click="startScreenShare" class="retry-button">화면 공유 시작</button>
       </div>
@@ -49,13 +33,32 @@
 import FrameCapture from '@/components/FrameCapture.vue'
 import BboxRenderer from '@/components/BboxRenderer.vue'
 import CrosshairCanvas from '@/components/CrosshairCanvas.vue'
+import StatusHUD from '@/components/StatusHUD.vue'
 
 export default {
   name: 'VideoSection',
   components: {
     FrameCapture,
     BboxRenderer,
-    CrosshairCanvas
+    CrosshairCanvas,
+    StatusHUD
+  },
+  props: {
+    videoFeedUrl: String,
+    speed: Number,
+    gear: String,
+    position: {
+      type: Object,
+      default: () => ({ x: 0, y: 0, z: 0 })
+    },
+    showDetections: {
+      type: Boolean,
+      default: true
+    },
+    showCrosshair: {
+      type: Boolean,
+      default: true
+    }
   },
   data() {
     return {
@@ -283,6 +286,21 @@ video { /* video 스타일링 */
   margin: -1.5rem 0 2rem 0;
   box-shadow: 0 0 10px #00ff00;
 }
+
+.video-info-overlay {
+  position: absolute;
+  bottom: 60px; /* ← 여기 숫자만 조정! */
+  left: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 6px;
+  z-index: 10;
+  pointer-events: none;
+  text-align: left;
+}
+
 
 /* 상태 인디케이터 스타일 */
 .status-indicator {
