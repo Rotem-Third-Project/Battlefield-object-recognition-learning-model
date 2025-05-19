@@ -1,8 +1,10 @@
+const path = require('path');
+
 module.exports = {
   devServer: {
     host: '0.0.0.0',
     port: 8080,
-    https: true,
+    https: false,
     // API 요청을 직접 백엔드로 보내도록 프록시를 비활성화합니다.
     // 프록시가 필요한 경우 아래 주석을 해제하세요.
     /*
@@ -28,5 +30,30 @@ module.exports = {
       }
     }
     */
+  },
+  
+  // 노드 모듈 경로 설정
+  configureWebpack: {
+    resolve: {
+      modules: [
+        path.resolve(__dirname, '../node_modules'),
+        'node_modules'
+      ],
+      alias: {
+        vue$: path.resolve(__dirname, '../node_modules/vue/dist/vue.esm-bundler.js'),
+        'vue-router': path.resolve(__dirname, '../node_modules/vue-router'),
+        'vuex': path.resolve(__dirname, '../node_modules/vuex')
+      }
+    }
+  },
+  
+  // 트랜스파일 설정
+  transpileDependencies: true,
+  
+  // CSS 설정
+  css: {
+    loaderOptions: {
+      // CSS 로더 설정...
+    }
   }
 } 

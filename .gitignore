@@ -14,4 +14,7 @@ Thumbs.db    # Windows
 
 # 🔐 민감한 정보가 담긴 환경 설정 파일
 .env
-# node_modules  # 주석 처리하여 Git에 포함
+
+# 📦 Node.js 의존성 모듈 (용량이 크고 package.json으로 복원 가능)
+node_modules/
+frontend/node_modules/

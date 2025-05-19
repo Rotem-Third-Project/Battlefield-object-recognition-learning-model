@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "serve": "set NODE_PATH=..\\node_modules && vue-cli-service serve",
+    "build": "set NODE_PATH=..\\node_modules && vue-cli-service build",
+    "lint": "set NODE_PATH=..\\node_modules && vue-cli-service lint"
+  },
+  "workspaces": {
+    "nohoist": ["**"]
   },
   "dependencies": {
   },
