@@ -15,7 +15,15 @@ export default {
     },
     captureInterval: {
       type: Number,
-      default: 50 // 기본 캡처 간격을 100에서 50으로 줄임 (밀리초)
+      default: 50 // 기본 캡처 간격 (밀리초)
+    },
+    yoloSampleRate: { // YOLO 처리 샘플링 비율 (2프레임당 1회)
+      type: Number,
+      default: 2
+    },
+    efficientNetSampleRate: { // EfficientNet 처리 샘플링 비율 (5프레임당 1회)
+      type: Number,
+      default: 5
     },
     resolution: {
       type: Object,
@@ -36,11 +44,13 @@ export default {
       captureLoopId: null,
       canvas: null,
       ctx: null,
-      lastCaptureTime: 0, // 마지막 캡처 시간 추적용 변수 추가
-      isProcessing: false, // 프레임 처리 중 여부를 추적
+      lastCaptureTime: 0, // 마지막 캡처 시간
+      isProcessing: false, // 프레임 처리 중 여부
       apiUrl: '/detect_objects', // 기본 API 경로
       connectionAttempts: 0,
-      maxRetries: 3
+      maxRetries: 3,
+      frameCount: 0, // 프레임 카운터 추가
+      lastEfficientNetFrame: null // 마지막 EfficientNet 처리 프레임 저장
     }
   },
   async mounted() {
@@ -77,13 +87,14 @@ export default {
         return;
       }
       
-      // 현재 시간 확인 (프레임 제한용)
+      // 현재 시간 확인
       const now = performance.now();
       const elapsed = now - (this.lastCaptureTime || 0);
       
       // captureInterval 시간이 지났을 때만 프레임 캡처
       if (elapsed >= this.captureInterval && !this.isProcessing) {
         this.lastCaptureTime = now;
+        this.frameCount++; // 프레임 카운터 증가
         
         // 비디오 프레임을 캔버스에 그림
         this.ctx.drawImage(
@@ -93,17 +104,27 @@ export default {
           this.canvas.height
         );
         
-        // Canvas를 Blob으로 변환하여 전송 (개선된 방식)
-        this.canvas.toBlob(blob => {
-          this.sendFrameToServer(blob);
-        }, 'image/jpeg', this.quality); // 품질 조정
+        // YOLO 처리: yoloSampleRate마다 실행
+        if (this.frameCount % this.yoloSampleRate === 0) {
+          this.canvas.toBlob(blob => {
+            this.sendFrameToServer(blob, false); // YOLO 처리
+          }, 'image/jpeg', this.quality);
+        }
+        
+        // EfficientNet 처리: efficientNetSampleRate마다 실행
+        if (this.frameCount % this.efficientNetSampleRate === 0) {
+          this.canvas.toBlob(blob => {
+            this.lastEfficientNetFrame = blob; // 마지막 프레임 저장
+            this.sendFrameToServer(blob, true); // EfficientNet 처리
+          }, 'image/jpeg', this.quality);
+        }
       }
       
       // 다음 프레임 캡처 요청
       this.captureLoopId = requestAnimationFrame(this.captureFrame);
     },
     
-    async sendFrameToServer(blob) {
+    async sendFrameToServer(blob, isEfficientNet = false) {
       // 처리 중 상태로 설정
       this.isProcessing = true;
       this.$emit('capture-status', 'processing');
@@ -111,38 +132,33 @@ export default {
       try {
         const formData = new FormData();
         formData.append('image', blob);
+        if (isEfficientNet) {
+          formData.append('process_crop', 'true'); // EfficientNet 처리 요청 플래그
+        }
         
         const startTime = performance.now();
         
-        // 호스트 IP 주소 가져오기 (배포 환경에 따라 조정 필요)
+        // 호스트 IP 주소 가져오기
         let baseUrl = '';
-        
-        // 네트워크 환경에 따라 API URL 설정 (백엔드 서버 URL)
         if (this.serverUrl) {
-          // 서버 URL이 전달된 경우 그대로 사용
           baseUrl = this.serverUrl;
         } else {
-          // 동적으로 서버 URL 구성
-          const hostname = window.location.hostname; // 현재 호스트 이름
-          
-          // 로컬 환경인 경우 localhost 사용, 그렇지 않으면 현재 호스트 IP 사용
+          const hostname = window.location.hostname;
           if (hostname === 'localhost' || hostname === '127.0.0.1') {
             baseUrl = 'http://localhost:5000';
           } else {
-            // 현재 호스트와 동일한 IP를 가진 서버의 5000번 포트로 요청
             baseUrl = `http://${hostname}:5000`;
           }
         }
         
         // API 엔드포인트 URL 구성
         const url = `${baseUrl}/detect_objects`;
+        console.log(`📡 API 요청 URL: ${url}, EfficientNet: ${isEfficientNet}`);
         
-        console.log(`📡 API 요청 URL: ${url}`);
-        
-        // 서버에 이미지 전송 (직접 요청 방식)
+        // 서버에 이미지 전송
         const response = await fetch(url, {
           method: 'POST',
-          body: formData, // multipart/form-data로 전송
+          body: formData,
           headers: {
             'Accept': 'application/json'
           },
@@ -158,7 +174,6 @@ export default {
           if (this.connectionAttempts >= this.maxRetries) {
             throw new Error(errorMsg);
           } else {
-            // 다음 요청에서 자동으로 다시 시도될 예정
             this.$emit('capture-status', 'error');
             return;
           }
@@ -178,6 +193,15 @@ export default {
             console.log(`📋 첫 번째 객체 정보:`, data.objects[0]);
           }
           this.$store.commit('setDetectedObjects', data.objects);
+          
+          // EfficientNet 처리: crop_data가 있는 객체에 대해 /process_crop 호출
+          if (isEfficientNet) {
+            for (const obj of data.objects) {
+              if (obj.className === 'enemy' && obj.crop_data) {
+                await this.processCropImage(obj);
+              }
+            }
+          }
         } else {
           console.warn('⚠️ 서버에서 객체 데이터를 받지 못했습니다.');
           this.$store.commit('setDetectedObjects', []);
@@ -195,11 +219,55 @@ export default {
       } catch (error) {
         console.error('🚨 서버 통신 오류:', error);
         this.$emit('capture-status', 'error');
-        // 오류 발생 시 빈 객체 배열 설정
         this.$store.commit('setDetectedObjects', []);
       } finally {
-        // 처리 완료 상태로 설정
         this.isProcessing = false;
+      }
+    },
+    
+    async processCropImage(obj) {
+      const objId = obj.track_id;
+      try {
+        const byteString = atob(obj.crop_data);
+        const byteArray = new Uint8Array(byteString.length);
+        for (let i = 0; i < byteString.length; i++) {
+          byteArray[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+        const formData = new FormData();
+        formData.append('crop', blob, `crop_${objId}.jpg`);
+        formData.append('track_id', objId);
+
+        const url = `${this.serverUrl || 'http://localhost:5000'}/process_crop`;
+        console.log(`📡 Crop API 요청: track_id=${objId}`);
+
+        const response = await fetch(url, {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' },
+          mode: 'cors',
+          credentials: 'omit'
+        });
+
+        if (!response.ok) {
+          throw new Error(`서버 오류: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'success') {
+          this.$store.commit('updateObjectThreat', {
+            id: objId,
+            threat: data.threat,
+            direction: data.direction,
+            direction_confidence: data.direction_confidence
+          });
+          console.log(`✅ Crop 처리 완료: track_id=${objId}, threat=${data.threat}`);
+        } else {
+          console.warn(`⚠️ Crop 처리 실패: track_id=${objId}`);
+        }
+      } catch (error) {
+        console.error(`🚨 Crop 처리 오류: track_id=${objId}`, error);
       }
     }
   },
@@ -223,4 +291,4 @@ export default {
   font-weight: bold;
   z-index: 9999;
 }
-</style> 
+</style>

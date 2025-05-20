@@ -1,35 +1,35 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-from fastapi import FastAPI, Request, Form, File, UploadFile #, WebSocket  # WebSocket은 사용 안 함
-from fastapi.responses import JSONResponse, HTMLResponse #, StreamingResponse  # StreamingResponse는 주석 처리된 video_feed에서만 사용
+from fastapi import FastAPI, Request, Form, File, UploadFile
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from ultralytics import YOLO  # YOLO 관련 임포트 주석 해제
+from ultralytics import YOLO
 from pathlib import Path
 from datetime import datetime
-# from contextlib import asynccontextmanager  # 주석 처리된 lifespan에서만 사용
 from utils.network import get_local_ip
-from models.detect import process_image_array  # YOLO 객체 감지 함수 주석 해제
+from models.detect import process_image_array
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import logging
+import tensorflow as tf
+import asyncio
+import cv2
+import numpy as np
+import threading
+import time
+import io
+from PIL import Image
+import base64
+import shutil
+import traceback
+from typing import List
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("app.main")
-
-# import tensorflow as tf  # TensorFlow 관련 임포트 주석 처리
-import asyncio
-# import mss  # 주석 처리된 capture_loop에서만 사용
-import cv2
-import numpy as np
-import threading
-import time
-import os
-import io
-from PIL import Image
-import base64
 
 ############################################################
 # 🛰️ FastAPI 앱 & 리소스 초기화
@@ -37,29 +37,31 @@ import base64
 
 BASE_DIR = Path(__file__).resolve().parent
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-# EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # 사용하지 않으므로 주석 처리
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
 TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
 app = FastAPI()
+
+# 임시 및 확정 객체 저장소
+pending_objects = {}  # track_id -> YOLO 감지 객체
+confirmed_objects = []  # 최종 결과 저장
 
 ##########################################################
 # 프론트엔드 리소스 설정 
 ##########################################################
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 개발 중 전체 허용
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
 
-# 앱 시작 시 로그
 logger.info("🚀 서버 초기화 중...")
 logger.info(f"📁 작업 디렉토리: {BASE_DIR}")
 logger.info(f"🎯 크로스헤어 경로: {CROSSHAIR_PATH}")
 logger.info(f"💾 임시 파일 경로: {TEMP_PATH}")
 
-# 프론트엔드 리소스 설정
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
@@ -70,49 +72,68 @@ try:
     logger.info("✅ YOLO 모델 로드 완료")
 except Exception as e:
     logger.error(f"❌ YOLO 모델 로드 실패: {str(e)}")
-    import traceback
     logger.error(traceback.format_exc())
-    # 모델 로드 실패시 None으로 설정
     yolo_model = None
-# efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+
+# EfficientNet 모델 로드
+try:
+    logger.info("🔍 EfficientNet 모델 로드 중...")
+    efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+    logger.info("✅ EfficientNet 모델 로드 완료")
+except Exception as e:
+    logger.error(f"❌ EfficientNet 모델 로드 실패: {str(e)}")
+    logger.error(traceback.format_exc())
+    efficientnet_model = None
+
+# Lifespan 핸들러
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async def cleanup_pending_task():
+        while True:
+            try:
+                for tid in list(pending_objects.keys()):
+                    if time.time() - pending_objects[tid]["timestamp"] > 300:  # 5분
+                        pending_objects.pop(tid)
+                        logger.info(f"Cleared stale pending object: track_id={tid}")
+                await asyncio.sleep(60)
+            except Exception as e:
+                logger.error(f"Error in cleanup_pending_task: {str(e)}")
+                await asyncio.sleep(60)
+    
+    task = asyncio.create_task(cleanup_pending_task())
+    logger.info("Started cleanup_pending_task")
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        logger.info("cleanup_pending_task cancelled on shutdown")
+
+app.lifespan = lifespan
 
 ############################################################
 # 🖼️ 이미지 처리 설정
 ############################################################
 
-# disp_x, disp_y = 2560, 1440  # disp_x, disp_y는 어디에서도 참조되지 않음
-size_x, size_y = 2560, 1440  # 작업표시줄 높이(40px)를 제외한 전체화면 크기
+size_x, size_y = 2560, 1440
 DESIRED_SIZE = (size_x, size_y)
 
-# FPS = 120  # 주석 처리된 코드에서만 사용
-# INTERVAL = 1.0 / FPS  # 주석 처리된 코드에서만 사용
-
 ROI = {
-    'top':    0,  # 상단에서 시작
-    'left':   0,  # 좌측에서 시작
-    'width':  size_x,  # 전체 가로 크기
-    'height': size_y  # 작업표시줄을 제외한 세로 크기
+    'top':    0,
+    'left':   0,
+    'width':  size_x,
+    'height': size_y
 }
 
-# capture_q = asyncio.Queue(maxsize=2)  # 주석 처리된 코드에서만 사용
-# stream_q = asyncio.Queue(maxsize=2)  # 주석 처리된 코드에서만 사용
-
-############################################################
-# 🧠 상태 변수들
-############################################################
-
 move_command_queue = []
-# action_command_queue = []  # 사용되지 않음
 horizontal_command_queue = []
 vertical_command_queue = []
 bullet_logs = []
 turret_pitch_angle = 0.0
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
-# current_position = (60, 27)  # 사용되지 않음
 last_turret_y = None
-TARGET = 9.42  # 초기값
-
+TARGET = 9.42
 detected_objects = []
 
 simulator_status = {
@@ -122,21 +143,61 @@ simulator_status = {
     "enemy_health": 100,
     "distance": 0,
 }
+
 def set_target(val: float):
     global TARGET
     TARGET = val
-    
+
+async def process_crop_async(crop_img, track_id):
+    """비동기적으로 EfficientNet 처리를 수행합니다."""
+    try:
+        if efficientnet_model is None:
+            logger.error("EfficientNet 모델이 로드되지 않았습니다.")
+            return
+
+        img_resized = cv2.resize(crop_img, (224, 224), interpolation=cv2.INTER_AREA)
+        img_array = np.expand_dims(img_resized, axis=0) / 255.0
+        predictions = efficientnet_model.predict(img_array, verbose=0)
+        logger.info(f"Raw predictions: {predictions[0].tolist()}")
+        class_idx = np.argmax(predictions[0])
+        confidence = float(predictions[0][class_idx])
+        class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+        direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
+        threat = {
+            "enemy_front": "LEVEL 3",
+            "enemy_side": "LEVEL 2",
+            "enemy_rear": "LEVEL 1",
+            "unknown": "Normal"
+        }.get(direction, "Normal")
+
+        logger.info(f"EfficientNet 예측: track_id={track_id}, 방향={direction}, 신뢰도={confidence:.2f}, 위협 등급={threat}")
+
+        # pending_objects에서 객체 가져와 confirmed_objects에 추가
+        if track_id in pending_objects:
+            obj = pending_objects.pop(track_id)
+            obj.update({
+                "threat": threat,
+                "direction": direction,
+                "direction_confidence": confidence
+            })
+            existing = next((o for o in confirmed_objects if o["track_id"] == track_id), None)
+            if existing:
+                confirmed_objects.remove(existing)
+            confirmed_objects.append(obj)
+            logger.info(f"Confirmed object: track_id={track_id}, threat={threat}")
+        else:
+            logger.warning(f"No pending object found for track_id={track_id}")
+    except Exception as e:
+        logger.error(f"EfficientNet 처리 실패 (track_id: {track_id}): {str(e)}")
 
 ############################################################
 # 🌐 FastAPI 엔드포인트
 ############################################################
 
-# 📌 대시보드 렌더
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
-# 📌 키 입력 처리
 @app.post("/input_key")
 async def input_key(key: str = Form(...)):
     global gear_level
@@ -148,14 +209,12 @@ async def input_key(key: str = Form(...)):
         gear_level -= 1
     return {"gear": gear_level}
 
-# 📌 이동 명령 요청
 @app.get("/get_move")
 async def get_move():
     if move_command_queue:
         return move_command_queue.pop(0)
     return {"move": "STOP", "weight": 1.0}
 
-# 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action():
     global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET
@@ -171,22 +230,20 @@ async def get_action():
         return vertical_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-# 📌 객체 감지 결과 제공 (기존 GET 엔드포인트)
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {
         "roi": ROI,
-        "objects": detected_objects
+        "objects": confirmed_objects
     }
 
-# 📌 클라이언트 이미지로 객체 감지 (새 POST 엔드포인트)
 @app.post("/detect_objects")
-async def detect_objects_from_client(image: UploadFile = File(...)):
+async def detect_objects_from_client(image: UploadFile = File(...), process_crop: bool = Form(False)):
+    global pending_objects
     try:
         logger.info("==== 객체 감지 요청 수신 (서버 처리 방식) ====")
         start_time = time.time()
         
-        # 이미지 데이터 읽기
         image_bytes = await image.read()
         np_arr = np.frombuffer(image_bytes, np.uint8)
         img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -198,7 +255,6 @@ async def detect_objects_from_client(image: UploadFile = File(...)):
                 content={"status": "ERROR", "message": "유효하지 않은 이미지 데이터"}
             )
             
-        # 이미지 정보 로깅
         logger.info(f"📊 입력 이미지 크기: {img_cv.shape}, 데이터 크기: {len(image_bytes)} bytes")
         
         if yolo_model is None:
@@ -208,12 +264,31 @@ async def detect_objects_from_client(image: UploadFile = File(...)):
                 content={"status": "ERROR", "message": "YOLO 모델이 초기화되지 않았습니다."}
             )
         
-        # YOLO 모델로 객체 감지 수행
         results = await process_image_array(
             image=img_cv,
             yolo_model=yolo_model,
             detected_objects=detected_objects,
+            image_size=(size_x, size_y)
         )
+        
+        if isinstance(results, JSONResponse):
+            return results
+
+        # pending_objects에 YOLO 감지 결과 저장
+        for obj in detected_objects:
+            track_id = obj["track_id"]
+            obj["timestamp"] = time.time()
+            pending_objects[track_id] = obj
+            logger.info(f"Added to pending_objects: track_id={track_id}")
+        
+        # EfficientNet 처리 요청 시 비동기 처리
+        if process_crop:
+            for obj in detected_objects:
+                if obj["className"] == "enemy" and "bbox" in obj:
+                    x1, y1, x2, y2 = map(int, obj["bbox"])
+                    crop_img = img_cv[y1:y2, x1:x2]
+                    if crop_img.size > 0:
+                        asyncio.create_task(process_crop_async(crop_img, obj["track_id"]))
         
         elapsed_time = time.time() - start_time
         logger.info(f"⏱️ 총 처리 시간: {elapsed_time:.4f}초")
@@ -222,19 +297,108 @@ async def detect_objects_from_client(image: UploadFile = File(...)):
         if detected_objects:
             logger.info(f"📋 첫 번째 객체 정보: {detected_objects[0]}")
             
-        # 객체 정보 JSON으로 반환
         return {"status": "success", "objects": detected_objects, "process_time_ms": int(elapsed_time * 1000)}
             
     except Exception as e:
         logger.error(f"❌ 객체 감지 오류: {str(e)}")
-        import traceback
         logger.error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
             content={"status": "ERROR", "message": str(e)}
         )
 
-# 📌 시뮬레이터 시작 위치
+@app.post("/process_crop")
+async def process_crop_image(crop: UploadFile = File(...), track_id: str = Form(...)):
+    global confirmed_objects
+    try:
+        if efficientnet_model is None:
+            logger.error("EfficientNet 모델이 로드되지 않았습니다.")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "ERROR", "message": "EfficientNet 모델이 초기화되지 않았습니다."}
+            )
+
+        image_bytes = await crop.read()
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        
+        if img_cv is None or img_cv.size == 0:
+            logger.error(f"유효하지 않은 크롭 이미지 데이터: 크기={len(image_bytes)} bytes")
+            return JSONResponse(
+                status_code=400,
+                content={"status": "ERROR", "message": "유효하지 않은 이미지 데이터"}
+            )
+
+        logger.info(f"Input image shape: {img_cv.shape}, mean: {np.mean(img_cv)}")
+        img_resized = cv2.resize(img_cv, (224, 224), interpolation=cv2.INTER_AREA)
+        img_array = np.expand_dims(img_resized, axis=0) / 255.0
+        predictions = efficientnet_model.predict(img_array, verbose=0)
+        logger.info(f"Raw predictions: {predictions[0].tolist()}")
+        class_idx = np.argmax(predictions[0])
+        confidence = float(predictions[0][class_idx])
+        class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+        direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
+        threat = {
+            "enemy_front": "LEVEL 3",
+            "enemy_side": "LEVEL 2",
+            "enemy_rear": "LEVEL 1",
+            "unknown": "Normal"
+        }.get(direction, "Normal")
+
+        logger.info(f"EfficientNet 예측: track_id={track_id}, 방향={direction}, 신뢰도={confidence:.2f}, 위협 등급={threat}")
+
+        # pending_objects에서 객체 가져와 confirmed_objects에 추가
+        if track_id in pending_objects:
+            obj = pending_objects.pop(track_id)
+            obj.update({
+                "threat": threat,
+                "direction": direction,
+                "direction_confidence": confidence
+            })
+            existing = next((o for o in confirmed_objects if o["track_id"] == track_id), None)
+            if existing:
+                confirmed_objects.remove(existing)
+            confirmed_objects.append(obj)
+            logger.info(f"Confirmed object: track_id={track_id}, threat={threat}")
+        else:
+            logger.warning(f"No pending object found for track_id={track_id}")
+
+        return {
+            "status": "success",
+            "direction": direction,
+            "direction_confidence": confidence,
+            "threat": threat
+        }
+    except Exception as e:
+        logger.error(f"크롭 이미지 처리 오류: track_id={track_id}, {str(e)}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"status": "ERROR", "message": str(e)}
+        )
+
+@app.post("/clear_pending")
+async def clear_pending(request: Request):
+    global pending_objects
+    try:
+        data = await request.json()
+        track_id = data.get("track_id")
+        if not track_id:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "ERROR", "message": "track_id is required"}
+            )
+        if track_id in pending_objects:
+            pending_objects.pop(track_id)
+            logger.info(f"Cleared pending object: track_id={track_id}")
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to clear pending object: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "ERROR", "message": str(e)}
+        )
+
 @app.get("/init")
 async def init():
     return {
@@ -243,23 +407,10 @@ async def init():
         "rdStartX": 59, "rdStartY": 10, "rdStartZ": 280
     }
 
-# 📌 상태 정보 제공 (HUD.js가 사용)
-# @app.get("/get_status")
-# async def get_status():
-#     simulator_status["turret_pitch"] = turret_pitch_angle
-#     return {
-#         **simulator_status,
-#         "ROI": ROI,
-#         "size_x": size_x,
-#         "size_y": size_y
-#     }
-
-# 📌 HEAD 메서드 지원을 위한 더미 엔드포인트 (Vue 프론트엔드용)
 @app.api_route("/get_status", methods=["GET", "HEAD"])
 async def get_status_dummy():
     return {"status": "online"}
 
-# 📌 포탄 충돌 정보 수신
 @app.post("/update_bullet")
 async def update_bullet(request: Request):
     data = await request.json()
@@ -268,33 +419,24 @@ async def update_bullet(request: Request):
     bullet_logs.append(log_msg)
     return {"status": "OK"}
 
-# 📌 로그 요청
 @app.get("/get_logs")
 async def get_logs():
     return {"logs": bullet_logs[-20:]}
 
-# 📌 시뮬레이터 정보 수신
 @app.post("/info")
 async def receive_simulator_info(request: Request):
     global simulator_status, last_turret_y
     data = await request.json()
-
-    ## 사용자 정보
-    last_turret_y = data.get("playerTurretY",last_turret_y) # 이 부분 수정했습니다~
+    last_turret_y = data.get("playerTurretY", last_turret_y)
     simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
     simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
     simulator_status["player_turret_x"] = data.get("playerTurretX", simulator_status["player_turret_x"])
     simulator_status["player_turret_y"] = last_turret_y
-
-    ## 적 정보
     simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
-
-    ## 거리 정보
     simulator_status["distance"] = data.get("distance", simulator_status["distance"])
     return {"status": "success"}
 
-# 📌 ROI 설정 API (웹에서 ROI 변경 가능)
 @app.post("/set_roi")
 async def set_roi(request: Request):
     global size_x, size_y, DESIRED_SIZE
@@ -303,77 +445,10 @@ async def set_roi(request: Request):
     ROI["left"] = int(data.get("left", ROI["left"]))
     ROI["width"] = int(data.get("width", ROI["width"]))
     ROI["height"] = int(data.get("height", ROI["height"]))
-
     size_x = ROI["width"]
     size_y = ROI["height"]
     DESIRED_SIZE = (size_x, size_y)
-
     return {"status": "success", "ROI": ROI}
-
-############################################################
-# 🎯 비동기 캡처 & 인코딩 루프
-############################################################
-
-# async def capture_loop():
-#     with mss.mss() as sct:
-#         while True:
-#             img = sct.grab(ROI.copy())
-#             await capture_q.put(img)
-#             await asyncio.sleep(INTERVAL)
-
-# async def encode_loop():
-#     while True:
-#         sct_img = await capture_q.get()
-
-#         arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
-#             sct_img.height, sct_img.width, 3)
-#         arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-
-#         arr = await process_image_array(
-#             image=arr,
-#             yolo_model=yolo_model,
-#             efficientnet_model=efficientnet_model,
-#             crosshair_path=CROSSHAIR_PATH,
-#             tmp_path=TEMP_PATH,
-#             detected_objects=detected_objects,
-#             horizontal_command_queue=horizontal_command_queue,
-#             set_target_callback=set_target
-#         )
-
-#         small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
-#         _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-#         await stream_q.put(jpeg.tobytes())
-
-#         await asyncio.sleep(0)
-
-# async def generate_mjpeg():
-#     while True:
-#         frame = await stream_q.get()
-#         yield (b'--frame\r\n'
-#                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-#         await asyncio.sleep(0)
-
-# @app.get("/video_feed")
-# async def video_feed():
-#     return StreamingResponse(generate_mjpeg(),
-#                              media_type='multipart/x-mixed-replace; boundary=frame')
-
-############################################################
-# 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
-############################################################
-
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # WebRTC로 전환했으므로 capture_loop 비활성화
-#     # asyncio.create_task(capture_loop())
-#     asyncio.create_task(encode_loop())
-#     yield
-
-# app.router.lifespan_context = lifespan
-
-############################################################
-# 🏁 서버 실행 설정
-############################################################
 
 SERVER_IP = get_local_ip()
 DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
