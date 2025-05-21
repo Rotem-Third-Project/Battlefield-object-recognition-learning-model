@@ -19,7 +19,7 @@ try:
     tracker = DeepSort(
         max_age=60,
         n_init=3,
-        max_iou_distance=0.7,
+        max_iou_distance=0.6,
         max_cosine_distance=0.4,
         nn_budget=200,
         embedder="mobilenet",

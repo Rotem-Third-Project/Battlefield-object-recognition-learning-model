@@ -95,9 +95,9 @@ export default createStore({
         commit('setDetectedObjects', objects);
         return;
       }
-      const DIRECTION_WEIGHT = 0.5;
-      const SIZE_WEIGHT = 0.3;
-      const DISTANCE_WEIGHT = 0.2;
+      const DIRECTION_WEIGHT = 0.7;
+      const SIZE_WEIGHT = 0.2;
+      const DISTANCE_WEIGHT = 0.1;
       const direction_weights = {
         "enemy_front": 0.5,
         "enemy_side": 0.3,
