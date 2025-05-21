@@ -150,47 +150,47 @@ def set_target(val: float):
     global TARGET
     TARGET = val
 
-async def process_crop_async(crop_img, track_id):
-    """비동기적으로 EfficientNet 처리를 수행합니다."""
-    try:
-        if efficientnet_model is None:
-            logger.error("EfficientNet 모델이 로드되지 않았습니다.")
-            return
+# async def process_crop_async(crop_img, track_id):
+#     """비동기적으로 EfficientNet 처리를 수행합니다."""
+#     try:
+#         if efficientnet_model is None:
+#             logger.error("EfficientNet 모델이 로드되지 않았습니다.")
+#             return
 
-        img_resized = cv2.resize(crop_img, (224, 224), interpolation=cv2.INTER_AREA)
-        img_array = np.expand_dims(img_resized, axis=0) / 255.0
-        predictions = efficientnet_model.predict(img_array, verbose=0)
-        logger.info(f"Raw predictions: {predictions[0].tolist()}")
-        class_idx = np.argmax(predictions[0])
-        confidence = float(predictions[0][class_idx])
-        class_names = ["enemy_front", "enemy_rear", "enemy_side"]
-        direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
-        threat = {
-            "enemy_front": "LEVEL 3",
-            "enemy_side": "LEVEL 2",
-            "enemy_rear": "LEVEL 1",
-            "unknown": "Normal"
-        }.get(direction, "Normal")
+#         img_resized = cv2.resize(crop_img, (224, 224), interpolation=cv2.INTER_AREA)
+#         img_array = np.expand_dims(img_resized, axis=0) / 255.0
+#         predictions = efficientnet_model.predict(img_array, verbose=0)
+#         logger.info(f"Raw predictions: {predictions[0].tolist()}")
+#         class_idx = np.argmax(predictions[0])
+#         confidence = float(predictions[0][class_idx])
+#         class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+#         direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
+#         threat = {
+#             "enemy_front": "LEVEL 3",
+#             "enemy_side": "LEVEL 2",
+#             "enemy_rear": "LEVEL 1",
+#             "unknown": "Normal"
+#         }.get(direction, "Normal")
 
-        logger.info(f"EfficientNet 예측: track_id={track_id}, 방향={direction}, 신뢰도={confidence:.2f}, 위협 등급={threat}")
+#         logger.info(f"EfficientNet 예측: track_id={track_id}, 방향={direction}, 신뢰도={confidence:.2f}, 위협 등급={threat}")
 
-        # pending_objects에서 객체 가져와 confirmed_objects에 추가
-        if track_id in pending_objects:
-            obj = pending_objects.pop(track_id)
-            obj.update({
-                "threat": threat,
-                "direction": direction,
-                "direction_confidence": confidence
-            })
-            existing = next((o for o in confirmed_objects if o["track_id"] == track_id), None)
-            if existing:
-                confirmed_objects.remove(existing)
-            confirmed_objects.append(obj)
-            logger.info(f"Confirmed object: track_id={track_id}, threat={threat}")
-        else:
-            logger.warning(f"No pending object found for track_id={track_id}")
-    except Exception as e:
-        logger.error(f"EfficientNet 처리 실패 (track_id: {track_id}): {str(e)}")
+#         # pending_objects에서 객체 가져와 confirmed_objects에 추가
+#         if track_id in pending_objects:
+#             obj = pending_objects.pop(track_id)
+#             obj.update({
+#                 "threat": threat,
+#                 "direction": direction,
+#                 "direction_confidence": confidence
+#             })
+#             existing = next((o for o in confirmed_objects if o["track_id"] == track_id), None)
+#             if existing:
+#                 confirmed_objects.remove(existing)
+#             confirmed_objects.append(obj)
+#             logger.info(f"Confirmed object: track_id={track_id}, threat={threat}")
+#         else:
+#             logger.warning(f"No pending object found for track_id={track_id}")
+#     except Exception as e:
+#         logger.error(f"EfficientNet 처리 실패 (track_id: {track_id}): {str(e)}")
 
 def process_crop_sync(crop_img, track_id):
     """동기적으로 EfficientNet 처리를 수행합니다."""
@@ -427,7 +427,7 @@ async def process_crop_image(crop: UploadFile = File(...), track_id: str = Form(
         logger.info(f"Raw predictions: {predictions[0].tolist()}")
         class_idx = np.argmax(predictions[0])
         confidence = float(predictions[0][class_idx])
-        class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+        class_names = ["enemy_front", "enemy_rear", "enemy_side"]
         direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
         threat = {
             "enemy_front": "LEVEL 3",
