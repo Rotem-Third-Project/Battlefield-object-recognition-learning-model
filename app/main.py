@@ -3,12 +3,12 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from fastapi import FastAPI, Request, Form, File, UploadFile
 from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
+# from fastapi.templating import Jinja2Templates  # 사용안함
+# from fastapi.staticfiles import StaticFiles  # 사용안함
 from ultralytics import YOLO
 from pathlib import Path
 from datetime import datetime
-from utils.network import get_local_ip
+# from utils.network import get_local_ip  # 사용안함
 from models.detect import process_image_array
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -20,11 +20,11 @@ import numpy as np
 import threading
 import time
 import io
-from PIL import Image
-import base64
-import shutil
+# from PIL import Image  # 사용안함
+# import base64  # 사용안함
+# import shutil  # 사용안함
 import traceback
-from typing import List
+# from typing import List  # 사용안함
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, 
@@ -36,9 +36,9 @@ logger = logging.getLogger("app.main")
 ############################################################
 
 BASE_DIR = Path(__file__).resolve().parent
-CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
+# CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"  # 사용안함
 EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
-TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
+# TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"  # 사용안함
 app = FastAPI()
 
 # 임시 및 확정 객체 저장소
@@ -59,11 +59,11 @@ app.add_middleware(
 
 logger.info("🚀 서버 초기화 중...")
 logger.info(f"📁 작업 디렉토리: {BASE_DIR}")
-logger.info(f"🎯 크로스헤어 경로: {CROSSHAIR_PATH}")
-logger.info(f"💾 임시 파일 경로: {TEMP_PATH}")
+# logger.info(f"🎯 크로스헤어 경로: {CROSSHAIR_PATH}")  # 사용안함
+# logger.info(f"💾 임시 파일 경로: {TEMP_PATH}")  # 사용안함
 
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+# app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")  # 사용안함
+# templates = Jinja2Templates(directory=BASE_DIR / "templates")  # 사용안함
 
 # YOLO 모델 로드
 try:
@@ -115,24 +115,24 @@ app.lifespan = lifespan
 # 🖼️ 이미지 처리 설정
 ############################################################
 
-size_x, size_y = 2560, 1440
-DESIRED_SIZE = (size_x, size_y)
+# size_x, size_y = 2560, 1440  # 사용안함
+# DESIRED_SIZE = (size_x, size_y)  # 사용안함
 
-ROI = {
-    'top':    0,
-    'left':   0,
-    'width':  size_x,
-    'height': size_y
-}
+# ROI = {  # 사용안함
+#     'top':    0,
+#     'left':   0,
+#     'width':  size_x,
+#     'height': size_y
+# }
 
 move_command_queue = []
 horizontal_command_queue = []
 vertical_command_queue = []
-bullet_logs = []
-turret_pitch_angle = 0.0
+# bullet_logs = []  # 사용안함
+# turret_pitch_angle = 0.0  # 사용안함
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
-last_turret_y = None
+# last_turret_y = None  # 사용안함
 TARGET = 9.42
 detected_objects = []
 
@@ -194,9 +194,9 @@ async def process_crop_async(crop_img, track_id):
 # 🌐 FastAPI 엔드포인트
 ############################################################
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+# @app.get("/dashboard", response_class=HTMLResponse)  # 사용안함
+# async def dashboard(request: Request):
+#     return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.post("/input_key")
 async def input_key(key: str = Form(...)):
@@ -217,9 +217,9 @@ async def get_move():
 
 @app.get("/get_action")
 async def get_action():
-    global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET
-    if last_turret_y is not None:
-        error = TARGET - last_turret_y
+    global vertical_command_queue, horizontal_command_queue, TARGET
+    if detected_objects:
+        error = TARGET - detected_objects[0]["y"]
         direction = "R" if error > 0 else "F"
         w = min(0.15 * abs(error), 1.0)
         vertical_command_queue.clear()
@@ -233,7 +233,7 @@ async def get_action():
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {
-        "roi": ROI,
+        # "roi": ROI,  # 사용안함
         "objects": confirmed_objects
     }
 
@@ -268,7 +268,7 @@ async def detect_objects_from_client(image: UploadFile = File(...), process_crop
             image=img_cv,
             yolo_model=yolo_model,
             detected_objects=detected_objects,
-            image_size=(size_x, size_y)
+            image_size=(2560, 1440)  # 하드코딩된 기본값 사용
         )
         
         if isinstance(results, JSONResponse):
@@ -416,18 +416,18 @@ async def update_bullet(request: Request):
     data = await request.json()
     impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     log_msg = f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}"
-    bullet_logs.append(log_msg)
+    # bullet_logs.append(log_msg)  # 사용안함
     return {"status": "OK"}
 
 @app.get("/get_logs")
 async def get_logs():
-    return {"logs": bullet_logs[-20:]}
+    # return {"logs": bullet_logs[-20:]}  # 사용안함
+    return {"logs": []}
 
 @app.post("/info")
 async def receive_simulator_info(request: Request):
-    global simulator_status, last_turret_y
+    global simulator_status
     data = await request.json()
-    last_turret_y = data.get("playerTurretY", last_turret_y)
     simulator_status["player_pos"] = data.get("playerPos", simulator_status["player_pos"])
     simulator_status["player_speed"] = data.get("playerSpeed", simulator_status["player_speed"])
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
@@ -437,24 +437,24 @@ async def receive_simulator_info(request: Request):
     simulator_status["distance"] = data.get("distance", simulator_status["distance"])
     return {"status": "success"}
 
-@app.post("/set_roi")
-async def set_roi(request: Request):
-    global size_x, size_y, DESIRED_SIZE
-    data = await request.json()
-    ROI["top"] = int(data.get("top", ROI["top"]))
-    ROI["left"] = int(data.get("left", ROI["left"]))
-    ROI["width"] = int(data.get("width", ROI["width"]))
-    ROI["height"] = int(data.get("height", ROI["height"]))
-    size_x = ROI["width"]
-    size_y = ROI["height"]
-    DESIRED_SIZE = (size_x, size_y)
-    return {"status": "success", "ROI": ROI}
+# @app.post("/set_roi")  # 사용안함
+# async def set_roi(request: Request):
+#     global size_x, size_y, DESIRED_SIZE
+#     data = await request.json()
+#     ROI["top"] = int(data.get("top", ROI["top"]))
+#     ROI["left"] = int(data.get("left", ROI["left"]))
+#     ROI["width"] = int(data.get("width", ROI["width"]))
+#     ROI["height"] = int(data.get("height", ROI["height"]))
+#     size_x = ROI["width"]
+#     size_y = ROI["height"]
+#     DESIRED_SIZE = (size_x, size_y)
+#     return {"status": "success", "ROI": ROI}
 
-SERVER_IP = get_local_ip()
-DASHBOARD_URL = f"http://{SERVER_IP}:8000/dashboard"
+# SERVER_IP = get_local_ip()  # 사용안함
+# DASHBOARD_URL = f"http://{SERVER_IP}:8000/dashboard"  # 사용안함
 
 if __name__ == "__main__":
-    print("🖥️ 대시보드 접속 주소:")
-    print(f"👉 {DASHBOARD_URL}")
+    # print("🖥️ 대시보드 접속 주소:")  # 사용안함
+    # print(f"👉 {DASHBOARD_URL}")  # 사용안함
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, access_log=False)
