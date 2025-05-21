@@ -19,11 +19,11 @@ export default {
     },
     yoloSampleRate: { // YOLO 처리 샘플링 비율 (2프레임당 1회)
       type: Number,
-      default: 2
+      default: 3
     },
     efficientNetSampleRate: { // EfficientNet 처리 샘플링 비율 (5프레임당 1회)
       type: Number,
-      default: 5
+      default: 2
     },
     resolution: {
       type: Object,
@@ -190,22 +190,26 @@ export default {
         if (data.objects) {
           console.log(`🎯 서버에서 받은 객체 수: ${data.objects.length}`);
           if (data.objects.length > 0) {
-            console.log(`📋 첫 번째 객체 정보:`, data.objects[0]);
+        console.log(`📋 첫 번째 객체 정보:`, data.objects[0]);
+      }
+      this.$store.commit('setDetectedObjects', data.objects);
+      
+      // EfficientNet 처리 로그 추가
+      if (isEfficientNet) {
+        console.log(`🚀 EfficientNet 처리 시작: ${data.objects.length}개 객체`);
+        for (const obj of data.objects) {
+          if (obj.className === 'enemy' && obj.crop_data) {
+            console.log(`📸 Crop 처리 요청: track_id=${obj.track_id}`);
+            await this.processCropImage(obj);
+          } else {
+            console.log(`⚠️ Crop 데이터 없음 또는 비적군 객체: track_id=${obj.track_id}, className=${obj.className}`);
           }
-          this.$store.commit('setDetectedObjects', data.objects);
-          
-          // EfficientNet 처리: crop_data가 있는 객체에 대해 /process_crop 호출
-          if (isEfficientNet) {
-            for (const obj of data.objects) {
-              if (obj.className === 'enemy' && obj.crop_data) {
-                await this.processCropImage(obj);
-              }
-            }
-          }
-        } else {
-          console.warn('⚠️ 서버에서 객체 데이터를 받지 못했습니다.');
-          this.$store.commit('setDetectedObjects', []);
         }
+      }
+    } else {
+      console.warn('⚠️ 서버에서 객체 데이터를 받지 못했습니다.');
+      this.$store.commit('setDetectedObjects', []);
+    }
         
         // 처리 완료 이벤트 발생
         this.$emit('frame-processed', {
