@@ -163,7 +163,7 @@ async def process_crop_async(crop_img, track_id):
         logger.info(f"Raw predictions: {predictions[0].tolist()}")
         class_idx = np.argmax(predictions[0])
         confidence = float(predictions[0][class_idx])
-        class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+        class_names = ["enemy_front", "enemy_rear", "enemy_side"]
         direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
         threat = {
             "enemy_front": "LEVEL 3",
@@ -205,7 +205,7 @@ def process_crop_sync(crop_img, track_id):
         logger.info(f"Raw predictions: {predictions[0].tolist()}")
         class_idx = np.argmax(predictions[0])
         confidence = float(predictions[0][class_idx])
-        class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+        class_names = ["enemy_front", "enemy_rear", "enemy_side"]
         direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
         threat = {
             "enemy_front": "LEVEL 3",
