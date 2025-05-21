@@ -20,6 +20,7 @@ import numpy as np
 import threading
 import time
 import io
+from concurrent.futures import ThreadPoolExecutor
 # from PIL import Image  # 사용안함
 # import base64  # 사용안함
 # import shutil  # 사용안함
@@ -27,9 +28,10 @@ import traceback
 # from typing import List  # 사용안함
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO, 
+logging.basicConfig(level=logging.WARNING,  # 기본 로깅 레벨을 WARNING으로 설정
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("app.main")
+logger.setLevel(logging.INFO)  # 필요시 더 자세한 로깅을 위해 INFO로 설정
 
 ############################################################
 # 🛰️ FastAPI 앱 & 리소스 초기화
@@ -190,6 +192,48 @@ async def process_crop_async(crop_img, track_id):
     except Exception as e:
         logger.error(f"EfficientNet 처리 실패 (track_id: {track_id}): {str(e)}")
 
+def process_crop_sync(crop_img, track_id):
+    """동기적으로 EfficientNet 처리를 수행합니다."""
+    try:
+        if efficientnet_model is None:
+            logger.error("EfficientNet 모델이 로드되지 않았습니다.")
+            return
+
+        img_resized = cv2.resize(crop_img, (224, 224), interpolation=cv2.INTER_AREA)
+        img_array = np.expand_dims(img_resized, axis=0) / 255.0
+        predictions = efficientnet_model.predict(img_array, verbose=0)
+        logger.info(f"Raw predictions: {predictions[0].tolist()}")
+        class_idx = np.argmax(predictions[0])
+        confidence = float(predictions[0][class_idx])
+        class_names = ["enemy_front", "enemy_side", "enemy_rear"]
+        direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
+        threat = {
+            "enemy_front": "LEVEL 3",
+            "enemy_side": "LEVEL 2",
+            "enemy_rear": "LEVEL 1",
+            "unknown": "Normal"
+        }.get(direction, "Normal")
+
+        logger.info(f"EfficientNet 예측: track_id={track_id}, 방향={direction}, 신뢰도={confidence:.2f}, 위협 등급={threat}")
+
+        # pending_objects에서 객체 가져와 confirmed_objects에 추가
+        if track_id in pending_objects:
+            obj = pending_objects.pop(track_id)
+            obj.update({
+                "threat": threat,
+                "direction": direction,
+                "direction_confidence": confidence
+            })
+            existing = next((o for o in confirmed_objects if o["track_id"] == track_id), None)
+            if existing:
+                confirmed_objects.remove(existing)
+            confirmed_objects.append(obj)
+            logger.info(f"Confirmed object: track_id={track_id}, threat={threat}")
+        else:
+            logger.warning(f"No pending object found for track_id={track_id}")
+    except Exception as e:
+        logger.error(f"EfficientNet 처리 실패 (track_id: {track_id}): {str(e)}")
+
 ############################################################
 # 🌐 FastAPI 엔드포인트
 ############################################################
@@ -244,6 +288,7 @@ async def detect_objects_from_client(image: UploadFile = File(...), process_crop
         logger.info("==== 객체 감지 요청 수신 (서버 처리 방식) ====")
         start_time = time.time()
         
+        # 1. 이미지 디코딩 및 유효성 검사
         image_bytes = await image.read()
         np_arr = np.frombuffer(image_bytes, np.uint8)
         img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -254,8 +299,28 @@ async def detect_objects_from_client(image: UploadFile = File(...), process_crop
                 status_code=400,
                 content={"status": "ERROR", "message": "유효하지 않은 이미지 데이터"}
             )
-            
-        logger.info(f"📊 입력 이미지 크기: {img_cv.shape}, 데이터 크기: {len(image_bytes)} bytes")
+        
+        # 원본 이미지 크기 저장
+        original_height, original_width = img_cv.shape[:2]
+        logger.info(f"원본 이미지 크기: {original_width}x{original_height}")
+        
+        # YOLO 모델이 기대하는 입력 크기 (YOLOv8 기본값: 640x640)
+        target_size = 640
+        
+        # 이미지 리사이즈 (종횡비 유지)
+        scale = min(target_size / original_width, target_size / original_height)
+        new_width = int(original_width * scale)
+        new_height = int(original_height * scale)
+        
+        # 검은색 배경 생성
+        resized = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+        
+        # 이미지를 중앙에 배치
+        dx = (target_size - new_width) // 2
+        dy = (target_size - new_height) // 2
+        resized[dy:dy+new_height, dx:dx+new_width] = cv2.resize(img_cv, (new_width, new_height))
+        
+        logger.info(f"YOLO 입력 크기: {target_size}x{target_size}, 리사이즈된 이미지 크기: {new_width}x{new_height}")
         
         if yolo_model is None:
             logger.error("YOLO 모델이 로드되지 않았습니다.")
@@ -264,31 +329,57 @@ async def detect_objects_from_client(image: UploadFile = File(...), process_crop
                 content={"status": "ERROR", "message": "YOLO 모델이 초기화되지 않았습니다."}
             )
         
+        # 2. YOLO 추론 (고정 크기 입력 사용)
         results = await process_image_array(
-            image=img_cv,
+            image=resized,
             yolo_model=yolo_model,
             detected_objects=detected_objects,
-            image_size=(2560, 1440)  # 하드코딩된 기본값 사용
+            image_size=(target_size, target_size)  # 고정 크기 사용
         )
         
         if isinstance(results, JSONResponse):
             return results
 
-        # pending_objects에 YOLO 감지 결과 저장
+        # 3. bbox 좌표를 원본 이미지 크기로 변환
+        current_time = time.time()
+        enemy_objects = []  # EfficientNet 처리를 위한 적 객체 목록
+        
         for obj in detected_objects:
             track_id = obj["track_id"]
-            obj["timestamp"] = time.time()
-            pending_objects[track_id] = obj
-            logger.info(f"Added to pending_objects: track_id={track_id}")
-        
-        # EfficientNet 처리 요청 시 비동기 처리
-        if process_crop:
-            for obj in detected_objects:
-                if obj["className"] == "enemy" and "bbox" in obj:
+            obj["timestamp"] = current_time
+            
+            # bbox 좌표 변환 (YOLO 출력 좌표 -> 원본 이미지 좌표)
+            if "bbox" in obj:
+                try:
                     x1, y1, x2, y2 = map(int, obj["bbox"])
+                    
+                    # YOLO 출력 좌표를 원본 이미지 좌표로 변환
+                    x1 = max(0, int((x1 - dx) / scale))
+                    y1 = max(0, int((y1 - dy) / scale))
+                    x2 = min(original_width, int((x2 - dx) / scale))
+                    y2 = min(original_height, int((y2 - dy) / scale))
+                    
+                    # 변환된 좌표 저장
+                    obj["bbox"] = [x1, y1, x2, y2]
+                    
+                    # EfficientNet 처리를 위해 적 객체 수집
+                    if process_crop and obj.get("className") == "enemy":
+                        enemy_objects.append((x1, y1, x2, y2, track_id))
+                        
+                except Exception as e:
+                    if logger.isEnabledFor(logging.ERROR):
+                        logger.error(f"bbox 좌표 변환 오류 (track_id: {track_id}): {str(e)}")
+            
+            # pending_objects에 저장
+            pending_objects[track_id] = obj
+        
+        # EfficientNet 처리는 별도의 스레드 풀로 한 번에 처리
+        if enemy_objects:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                for x1, y1, x2, y2, track_id in enemy_objects:
                     crop_img = img_cv[y1:y2, x1:x2]
                     if crop_img.size > 0:
-                        asyncio.create_task(process_crop_async(crop_img, obj["track_id"]))
+                        executor.submit(process_crop_sync, crop_img, track_id)
         
         elapsed_time = time.time() - start_time
         logger.info(f"⏱️ 총 처리 시간: {elapsed_time:.4f}초")
