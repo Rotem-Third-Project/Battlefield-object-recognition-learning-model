@@ -451,10 +451,10 @@ async def set_roi(request: Request):
     return {"status": "success", "ROI": ROI}
 
 SERVER_IP = get_local_ip()
-DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
+DASHBOARD_URL = f"http://{SERVER_IP}:8000/dashboard"
 
 if __name__ == "__main__":
     print("🖥️ 대시보드 접속 주소:")
     print(f"👉 {DASHBOARD_URL}")
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=8000, access_log=False)

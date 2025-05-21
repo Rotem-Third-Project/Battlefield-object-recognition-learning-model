@@ -145,9 +145,9 @@ export default {
         } else {
           const hostname = window.location.hostname;
           if (hostname === 'localhost' || hostname === '127.0.0.1') {
-            baseUrl = 'http://localhost:5000';
+            baseUrl = 'http://localhost:8000';
           } else {
-            baseUrl = `http://${hostname}:5000`;
+            baseUrl = `http://${hostname}:8000`;
           }
         }
         
@@ -239,7 +239,7 @@ export default {
         formData.append('crop', blob, `crop_${objId}.jpg`);
         formData.append('track_id', objId);
 
-        const url = `${this.serverUrl || 'http://localhost:5000'}/process_crop`;
+        const url = `${this.serverUrl || 'http://localhost:8000'}/process_crop`;
         console.log(`📡 Crop API 요청: track_id=${objId}`);
 
         const response = await fetch(url, {

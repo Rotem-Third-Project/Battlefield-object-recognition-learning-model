@@ -106,7 +106,7 @@ export default {
   },
   mounted() {
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      this.apiServerUrl = `http://${window.location.hostname}:5000`;
+      this.apiServerUrl = `http://${window.location.hostname}:8000`;
       console.log(`🔌 API 서버 URL 설정: ${this.apiServerUrl}`);
     }
     
