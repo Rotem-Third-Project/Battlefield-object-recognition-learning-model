@@ -20,7 +20,7 @@
           :maxSpeed="100"
           class="speed-gauge"
         />
-        <TurretCrosshair :turret-x="turretX" :turret-y="turretY" />
+        <TurretCrosshair :turret-x="turretX" :turret-y="turretY" :locked-angle="lockedAngle" />
         <SignalStrength :signalStrength="signal" />
       </div>
       <!-- 👇 기존 컴포넌트들 -->
@@ -89,15 +89,11 @@ export default {
       type: Boolean,
       default: true
     },
-    showSpeedGauge: {  // ✅ 이거 추가!!
+    showSpeedGauge: {
       type: Boolean,
       default: true
     },
     turretX: {
-      type: Number,
-      default: 0
-    },
-    turretY: {
       type: Number,
       default: 0
     },
@@ -113,9 +109,9 @@ export default {
       videoHeight: 720,
       scaleFactorX: 1,
       scaleFactorY: 1,
-      originalWidth: 1280, // 원래 입력 크기로 변경
+      originalWidth: 1280,
       originalHeight: 720,
-      captureStatus: 'idle', // 'idle', 'sending', 'success', 'error'
+      captureStatus: 'idle',
       scaleUpdateInterval: null,
       objectCount: 0,
       viewportWidth: 0,
@@ -127,6 +123,7 @@ export default {
       currentAngle: 0,   // 포신의 현재 각도
       lockedAngle: null, // 멈춘 각도
       signal: 0,
+      turretY: 0,
     }
   },
   computed: {
@@ -327,8 +324,11 @@ export default {
         }
         const data = await res.json();
         this.speed = data.player_speed || 0;
+        if (data.player_turret_y !== undefined) {
+          this.turretY = data.player_turret_y;
+        }
       } catch (error) {
-        console.error('속도 정보 불러오기 실패:', error);
+        console.error('상태 정보 불러오기 실패:', error);
       }
       this.statusPollingInterval = setTimeout(this.startSpeedPolling, 100);
     },
