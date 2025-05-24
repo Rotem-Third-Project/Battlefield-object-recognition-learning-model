@@ -171,10 +171,10 @@ h3 {
   color: #00ff00;
 }
 
-#object-list th:nth-child(1) { width: 35%; }
+#object-list th:nth-child(1) { width: 55%; }
 #object-list th:nth-child(2) { width: 10%; }
 #object-list th:nth-child(3) { width: 20%; }
-#object-list th:nth-child(4) { width: 35%; }
+#object-list th:nth-child(4) { width: 15%; }
 
 #object-list th,
 #object-list td {
