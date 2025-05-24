@@ -15,7 +15,7 @@
           <tr v-if="processedObjects.length === 0">
             <td colspan="4" style="text-align: center">위험요소 없음</td>
           </tr>
-          <tr v-for="obj in processedObjects" 
+          <tr v-for="obj in displayObjects" 
               :key="obj.track_id || obj.bbox?.join('-')" 
               :class="[threatClass(obj.threat), {'selected': selectedObjectId === obj.track_id}]"
               @click="selectObject(obj)">
@@ -35,37 +35,63 @@
 <script>
 export default {
   name: 'ObjectList',
-  mounted() {
-  console.log('[ObjectList mounted] processedObjects:', this.processedObjects);
-  },
   data() {
     return {
-      selectedObjectId: null
+      selectedObjectId: null,
+      objectStateCache: {} // 캐시!
     };
   },
   computed: {
+    // 새롭게 displayObjects로 캐시값을 보여줌!
+    displayObjects() {
+      // rank 기준 정렬 (없으면 99로 최하위)
+      return Object.values(this.objectStateCache).sort((a, b) => (a.rank || 99) - (b.rank || 99));
+    },
     processedObjects() {
+      // (기존 방식과 호환)
       return this.$store.state.processedObjects || [];
     }
   },
   watch: {
-    processedObjects: {
-      handler(newObjects) {
-        console.log('객체 업데이트:', newObjects.map(o => ({
-          track_id: o.track_id,
-          threat: o.threat,
-          rank: o.rank,
-          direction: o.direction
-        })));
-      },
-      deep: true
-    }
-  },
+  processedObjects: {
+    handler(newObjects) {
+      // 캐시 갱신 로직 (앞서 제안한 방식과 동일)
+      newObjects.forEach(obj => {
+        const id = obj.track_id;
+        if (!id) return;
+        if (!this.objectStateCache[id]) {
+          this.objectStateCache[id] = { ...obj };
+        } else {
+          const cached = this.objectStateCache[id];
+          for (const key of ['threat', 'rank', 'direction', 'confidence', 'className', 'bbox']) {
+            if (
+              obj[key] !== undefined &&
+              obj[key] !== null &&
+              obj[key] !== '' &&
+              (obj[key] !== 'Normal' || !cached[key])
+            ) {
+              cached[key] = obj[key];
+            }
+          }
+        }
+      });
+      // 캐시에 없는 id 제거 (옵션)
+      const ids = newObjects.map(o => o.track_id).filter(Boolean);
+      Object.keys(this.objectStateCache).forEach(id => {
+        if (!ids.includes(Number(id)) && !ids.includes(id)) {
+          delete this.objectStateCache[id];
+        }
+      });
+    },
+    deep: true,
+    immediate: true
+  }
+},
   methods: {
     formatClassName(obj) {
       if (!obj.className) return '알 수 없음';
       let name = obj.className;
-      if (obj.confidence) {
+      if (obj.confidence !== undefined) {
         const confidence = Math.round(obj.confidence * 100);
         name += ` (${confidence}%)`;
       }
