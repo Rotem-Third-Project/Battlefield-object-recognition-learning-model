@@ -238,24 +238,12 @@ async def process_image_array(
                     )
                     current_track_id = yolo_idx_to_track_id.get(idx)
                     
-                    # 클래스명에 따른 위험 등급 설정
-                    threat_level = "Normal"
-                    if yolo_class_name == "enemy":
-                        # 적 객체에 대한 위험도 설정 (거리, 방향 등에 따라 조정 가능)
-                        if confidence > 0.8:
-                            threat_level = "LEVEL 3"  # 고위험
-                        elif confidence > 0.5:
-                            threat_level = "LEVEL 2"  # 중위험
-                        else:
-                            threat_level = "LEVEL 1"  # 저위험
-                    
                     filtered_objects.append(
                         {
                             "className": yolo_class_name,
                             "track_id": current_track_id,
                             "bbox": [x1, y1, x2, y2],
                             "confidence": confidence,
-                            "threat": threat_level,
                         }
                     )
             
@@ -270,7 +258,6 @@ async def process_image_array(
             if detected_objects is not None:
                 detected_objects.clear()
                 detected_objects.extend(filtered_objects)
-                logger.info(f"detected_objects 목록 업데이트 완료 ({len(detected_objects)}개)")
             else:
                 logger.warning("detected_objects가 None입니다")
             

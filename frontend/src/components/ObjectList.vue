@@ -8,13 +8,12 @@
             <th>클래스명</th>
             <th>ID</th>
             <th>위험등급</th>
-            <th>위치</th>
             <th>우선순위</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="processedObjects.length === 0">
-            <td colspan="5" style="text-align: center">위험요소 없음</td>
+            <td colspan="4" style="text-align: center">위험요소 없음</td>
           </tr>
           <tr v-for="obj in processedObjects" 
               :key="obj.track_id || obj.bbox?.join('-')" 
@@ -25,7 +24,6 @@
             <td :class="threatClass(obj.threat)">
               {{ obj.threat || 'Normal' }}
             </td>
-            <td class="location-cell">{{ formatLocation(obj.bbox) }}</td>
             <td :class="['priority-cell', `rank-${obj.rank || '3'}`]">{{ obj.rank || '-' }}</td>
           </tr>
         </tbody>
@@ -37,6 +35,9 @@
 <script>
 export default {
   name: 'ObjectList',
+  mounted() {
+  console.log('[ObjectList mounted] processedObjects:', this.processedObjects);
+  },
   data() {
     return {
       selectedObjectId: null
@@ -72,12 +73,6 @@ export default {
         name += ` [${obj.direction}]`;
       }
       return name;
-    },
-    formatLocation(bbox) {
-      if (!bbox || bbox.length !== 4) return '--';
-      const x = Math.round((bbox[0] + bbox[2]) / 2);
-      const y = Math.round((bbox[1] + bbox[3]) / 2);
-      return `(${x}, ${y})`;
     },
     selectObject(obj) {
       const objId = obj.track_id;
@@ -153,8 +148,7 @@ h3 {
 #object-list th:nth-child(1) { width: 35%; }
 #object-list th:nth-child(2) { width: 10%; }
 #object-list th:nth-child(3) { width: 20%; }
-#object-list th:nth-child(4) { width: 20%; }
-#object-list th:nth-child(5) { width: 15%; }
+#object-list th:nth-child(4) { width: 35%; }
 
 #object-list th,
 #object-list td {
@@ -224,12 +218,6 @@ h3 {
 .priority-cell.rank-3 {
   color: #28a745;
   background-color: rgba(40, 167, 69, 0.1);
-}
-
-.location-cell {
-  font-family: monospace;
-  color: #ffffff;
-  background-color: rgba(0, 255, 0, 0.05);
 }
 
 @media (max-width: 768px) {

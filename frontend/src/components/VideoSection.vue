@@ -27,6 +27,7 @@
       <FrameCapture
         v-if="videoMounted"
         :video-element="$refs.videoElement"
+        mode="processed"
         @frame-processed="onFrameProcessed"
         @capture-status="onCaptureStatus"
         :server-url="apiServerUrl"
