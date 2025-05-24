@@ -57,12 +57,7 @@ def compute_iou(boxA, boxB):  # box format: [x1, y1, x2, y2]
 async def process_image_array(
     image=None,
     yolo_model=None,
-    efficientnet_model=None,
-    crosshair_path=None,
-    tmp_path=None,
     detected_objects=None,
-    horizontal_command_queue=None,
-    set_target_callback=None
 ):
     try:
         logger.info("Starting image detection")

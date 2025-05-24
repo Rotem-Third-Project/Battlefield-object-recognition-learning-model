@@ -60,10 +60,10 @@ export default {
         'truck': '#0000ff',
         'rock': '#ffff00'
       }),
-      threatStyles: Object.freeze({
-        'LEVEL 3': { lineWidth: 4, lineDash: [], label: '위험' },
-        'LEVEL 2': { lineWidth: 3, lineDash: [], label: '주의' },
-        'LEVEL 1': { lineWidth: 2, lineDash: [], label: '관찰' },
+      threatStyles: Object.freeze({ // lineDash 빈리스트 >> 5, 5로 채움 >> 실선 -> 점선
+        'LEVEL 3': { lineWidth: 4, lineDash: [5, 5], label: '위험' },
+        'LEVEL 2': { lineWidth: 3, lineDash: [5, 5], label: '주의' },
+        'LEVEL 1': { lineWidth: 2, lineDash: [5, 5], label: '관찰' },
         'Normal': { lineWidth: 2, lineDash: [5, 5], label: '안전' }
       }),
       redrawCounter: 0,
@@ -325,17 +325,17 @@ export default {
           const confidence = obj.confidence ? Math.round(obj.confidence * 100) : '??'
           const label = `${obj.className} ${confidence}%`
           
-          // 위험 등급 라벨 추가
-          const threatLabel = obj.threat ? 
-            `[${style.label || obj.threat}]` : ''
+          // 위험 등급 라벨 추가--------------------------------------------------------------------------주석처리 >> 위험 라벨링 관련 코드
+          // const threatLabel = obj.threat ? 
+          //   `[${style.label || obj.threat}]` : ''
           
           // 라벨 그리기
           this.drawLabel(scaledX1, scaledY1 - 25, label, color)
           
-          // 위험 등급 표시 (있는 경우만)
-          if (threatLabel) {
-            this.drawLabel(scaledX1, scaledY1 - 5, threatLabel, color)
-          }
+          // 위험 등급 표시 (있는 경우만) ------------------------------------------------------------
+          // if (threatLabel) {
+          //   this.drawLabel(scaledX1, scaledY1 - 5, threatLabel, color)
+          // }--------------------------------------------------------------------------------------주석처리함
           
           // 트래킹 ID가 있으면 표시
           if (obj.track_id) {

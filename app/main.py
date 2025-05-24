@@ -1,7 +1,7 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-from fastapi import FastAPI, Request, Form, File, UploadFile #, WebSocket  # WebSocket은 사용 안 함
+from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile #, WebSocket  # WebSocket은 사용 안 함
 from fastapi.responses import JSONResponse, HTMLResponse #, StreamingResponse  # StreamingResponse는 주석 처리된 video_feed에서만 사용
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -13,13 +13,14 @@ from utils.network import get_local_ip
 from models.detect import process_image_array  # YOLO 객체 감지 함수 주석 해제
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from typing import List, Dict, Optional
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("app.main")
 
-# import tensorflow as tf  # TensorFlow 관련 임포트 주석 처리
+import tensorflow as tf  # TensorFlow 관련 임포트 주석 처리
 import asyncio
 # import mss  # 주석 처리된 capture_loop에서만 사용
 import cv2
@@ -37,7 +38,7 @@ import base64
 
 BASE_DIR = Path(__file__).resolve().parent
 CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
-# EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # 사용하지 않으므로 주석 처리
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # 사용하지 않으므로 주석 처리
 TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
 app = FastAPI()
 
@@ -73,7 +74,7 @@ except Exception as e:
     logger.error(traceback.format_exc())
     # 모델 로드 실패시 None으로 설정
     yolo_model = None
-# efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
+efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
 
 ############################################################
 # 🖼️ 이미지 처리 설정
@@ -100,6 +101,8 @@ ROI = {
 # 🧠 상태 변수들
 ############################################################
 
+cropped_images = {}  # {track_id: base64_image}
+cropped_images_lock = threading.Lock()
 move_command_queue = []
 # action_command_queue = []  # 사용되지 않음
 horizontal_command_queue = []
@@ -185,68 +188,138 @@ async def detect_objects_from_client(image: UploadFile = File(...)):
     try:
         logger.info("==== 객체 감지 요청 수신 (서버 처리 방식) ====")
         start_time = time.time()
-        
-        # 이미지 데이터 읽기
         image_bytes = await image.read()
         np_arr = np.frombuffer(image_bytes, np.uint8)
         img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        
-        if img_cv is None or img_cv.size == 0:
-            logger.error("유효하지 않은 이미지 데이터 수신")
-            return JSONResponse(
-                status_code=400,
-                content={"status": "ERROR", "message": "유효하지 않은 이미지 데이터"}
-            )
-            
-        # 이미지 정보 로깅
-        logger.info(f"📊 입력 이미지 크기: {img_cv.shape}, 데이터 크기: {len(image_bytes)} bytes")
-        
-        if yolo_model is None:
-            logger.error("YOLO 모델이 로드되지 않았습니다.")
-            return JSONResponse(
-                status_code=500,
-                content={"status": "ERROR", "message": "YOLO 모델이 초기화되지 않았습니다."}
-            )
-        
-        # YOLO 모델로 객체 감지 수행
+        if img_cv is None:
+            raise HTTPException(status_code=400, detail="유효하지 않은 이미지 파일입니다.")
+        local_detected_objects = []
         results = await process_image_array(
             image=img_cv,
             yolo_model=yolo_model,
-            efficientnet_model=None,
-            crosshair_path=CROSSHAIR_PATH,
-            tmp_path=TEMP_PATH,
-            detected_objects=detected_objects,
-            horizontal_command_queue=horizontal_command_queue,
-            set_target_callback=set_target
+            detected_objects=local_detected_objects,
         )
-        
+        with cropped_images_lock:
+            cropped_images.clear()
+            detected_objects[:] = local_detected_objects
+            for obj in local_detected_objects:
+                if obj["className"] == "enemy" and obj["track_id"] is not None:
+                    x1, y1, x2, y2 = obj["bbox"]
+                    x1, y1, x2, y2 = max(0, x1), max(0, y1), min(img_cv.shape[1], x2), min(img_cv.shape[0], y2)
+                    if x2 > x1 and y2 > y1:
+                        crop_img = img_cv[y1:y2, x1:x2]
+                        _, encoded_crop = cv2.imencode('.jpg', crop_img, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+                        crop_base64 = base64.b64encode(encoded_crop).decode('utf-8')
+                        cropped_images[obj["track_id"]] = crop_base64
         elapsed_time = time.time() - start_time
-        logger.info(f"⏱️ 총 처리 시간: {elapsed_time:.4f}초")
-        logger.info(f"🎯 감지된 객체 수: {len(detected_objects)}")
-        
-        if detected_objects:
-            logger.info(f"📋 첫 번째 객체 정보: {detected_objects[0]}")
-            
-        # 객체 정보 JSON으로 반환
-        return {"status": "success", "objects": detected_objects, "process_time_ms": int(elapsed_time * 1000)}
-            
+        return {
+            "status": "success",
+            "objects": local_detected_objects,
+            "process_time_ms": int(elapsed_time * 1000)
+        }
     except Exception as e:
         logger.error(f"❌ 객체 감지 오류: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"status": "ERROR", "message": str(e)}
-        )
+        return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
 
-# 📌 시뮬레이터 시작 위치
-@app.get("/init")
-async def init():
-    return {
-        "startMode": "start",
-        "blStartX": 60, "blStartY": 10, "blStartZ": 27.23,
-        "rdStartX": 59, "rdStartY": 10, "rdStartZ": 280
-    }
+
+async def process_crop_batch_async(crop_imgs: List[np.ndarray], track_ids: List[int], pending_objects: Dict, confirmed_objects: List):
+    """
+    배치 크롭 이미지 처리 (EfficientNet)
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        def predict_batch():
+            img_arrays = [cv2.resize(img, (224, 224)) / 255.0 for img in crop_imgs]
+            img_arrays = np.array(img_arrays)
+            return efficientnet_model.predict(img_arrays, verbose=0)
+        predictions = await loop.run_in_executor(None, predict_batch)
+        for track_id, pred in zip(track_ids, predictions):
+            class_idx = np.argmax(pred)
+            confidence = float(pred[class_idx])
+            class_names = ["enemy_front", "enemy_rear", "enemy_side"]
+            direction = class_names[class_idx] if class_idx < len(class_names) else "unknown"
+            threat = {
+                "enemy_front": "LEVEL 3",
+                "enemy_side": "LEVEL 2",
+                "enemy_rear": "LEVEL 1",
+                "unknown": "Normal"
+            }.get(direction, "Normal")
+            if track_id in pending_objects:
+                obj = pending_objects.pop(track_id)
+                obj.update({
+                    "threat": threat,
+                    "direction": direction,
+                    "direction_confidence": confidence
+                })
+                existing = next((o for o in confirmed_objects if o["track_id"] == track_id), None)
+                if existing:
+                    confirmed_objects.remove(existing)
+                confirmed_objects.append(obj)
+    except Exception as e:
+        logger.error(f"배치 크롭 이미지 처리 오류: {str(e)}")
+        
+def calculate_priorities(objects: List[Dict]) -> List[Dict]:
+    """
+    우선순위 계산
+    """
+    try:
+        threat_weights = {"LEVEL 3": 3, "LEVEL 2": 2, "LEVEL 1": 1, "Normal": 0}
+        for obj in objects:
+            threat_level = obj.get("threat", "Normal")
+            confidence = obj.get("confidence", 0.0)
+            direction_conf = obj.get("direction_confidence", 0.0)
+            priority_score = threat_weights.get(threat_level, 0) * (confidence + direction_conf)
+            obj["priority_score"] = priority_score
+        sorted_objects = sorted(objects, key=lambda x: x.get("priority_score", 0), reverse=True)
+        for rank, obj in enumerate(sorted_objects, 1):
+            obj["rank"] = rank
+        return sorted_objects
+    except Exception as e:
+        logger.error(f"우선순위 계산 오류: {str(e)}")
+        return objects
+
+@app.post("/detect_objects_with_postprocessing")
+async def detect_objects_with_postprocessing():
+    try:
+        logger.info("==== 객체 감지 후처리 요청 수신 ====")
+        start_time = time.time()
+        with cropped_images_lock:
+            if not detected_objects:
+                return JSONResponse(
+                    status_code=400,
+                    content={"status": "ERROR", "message": "감지된 객체 또는 크롭 이미지가 없습니다."}
+                )
+        crop_imgs = []
+        track_ids = []
+        pending_objects = {}
+        for track_id, crop_base64 in cropped_images.items():
+            image_bytes = base64.b64decode(crop_base64)
+            np_arr = np.frombuffer(image_bytes, np.uint8)
+            crop_img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if crop_img is not None and crop_img.size > 0:
+                obj = next((o for o in detected_objects if o["track_id"] == track_id), None)
+                if obj:
+                    crop_imgs.append(crop_img)
+                    track_ids.append(track_id)
+                    pending_objects[track_id] = obj
+        confirmed_objects = []
+        if crop_imgs:
+            await process_crop_batch_async(crop_imgs, track_ids, pending_objects, confirmed_objects)
+        remaining_objects = [obj for obj in detected_objects if obj["track_id"] not in pending_objects or obj["className"] != "enemy"]
+        local_processed_objects = confirmed_objects + remaining_objects
+        local_processed_objects = calculate_priorities(local_processed_objects)
+        with cropped_images_lock:
+            detected_objects[:] = local_processed_objects
+        elapsed_time = time.time() - start_time
+        return {
+            "status": "success",
+            "objects": local_processed_objects,
+            "process_time_ms": int(elapsed_time * 1000)
+        }
+    except Exception as e:
+        logger.error(f"❌ 객체 감지 및 후처리 오류: {str(e)}")
+        return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
+
 
 # 📌 상태 정보 제공 (HUD.js가 사용)
 # @app.get("/get_status")
@@ -263,20 +336,6 @@ async def init():
 @app.api_route("/get_status", methods=["GET", "HEAD"])
 async def get_status_dummy():
     return {"status": "online"}
-
-# 📌 포탄 충돌 정보 수신
-@app.post("/update_bullet")
-async def update_bullet(request: Request):
-    data = await request.json()
-    impact_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    log_msg = f"[{impact_time}] 💥 Impact at X={data.get('x')}, Y={data.get('y')}, Z={data.get('z')}, Target={data.get('hit')}"
-    bullet_logs.append(log_msg)
-    return {"status": "OK"}
-
-# 📌 로그 요청
-@app.get("/get_logs")
-async def get_logs():
-    return {"logs": bullet_logs[-20:]}
 
 # 📌 시뮬레이터 정보 수신
 @app.post("/info")

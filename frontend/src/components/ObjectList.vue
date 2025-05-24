@@ -13,17 +13,17 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-if="storeObjects.length === 0">
+          <tr v-if="processedObjects.length === 0">
             <td colspan="5" style="text-align: center">위험요소 없음</td>
           </tr>
-          <tr v-for="obj in storeObjects" 
-              :key="obj.track_id" 
-              :class="[$store.getters.getThreatClass(obj.threat), {'selected': selectedObjectId === obj.track_id}]"
+          <tr v-for="obj in processedObjects" 
+              :key="obj.track_id || obj.bbox?.join('-')" 
+              :class="[threatClass(obj.threat), {'selected': selectedObjectId === obj.track_id}]"
               @click="selectObject(obj)">
             <td>{{ formatClassName(obj) }}</td>
             <td>{{ obj.track_id || '-' }}</td>
-            <td :class="$store.getters.getThreatClass(obj.threat)">
-              {{ obj.threat || 'Pending' }}
+            <td :class="threatClass(obj.threat)">
+              {{ obj.threat || 'Normal' }}
             </td>
             <td class="location-cell">{{ formatLocation(obj.bbox) }}</td>
             <td :class="['priority-cell', `rank-${obj.rank || '3'}`]">{{ obj.rank || '-' }}</td>
@@ -39,33 +39,23 @@ export default {
   name: 'ObjectList',
   data() {
     return {
-      selectedObjectId: null,
-      processingObjects: new Set(),
-      lastProcessedObjects: null,
-      retryCounts: new Map(),
-      cropCache: new Map()
-    }
+      selectedObjectId: null
+    };
   },
   computed: {
-    storeObjects() {
-      return this.$store.state.detectedObjects || []
+    processedObjects() {
+      return this.$store.state.processedObjects || [];
     }
   },
   watch: {
-    storeObjects: {
+    processedObjects: {
       handler(newObjects) {
-        const objectsHash = JSON.stringify(newObjects.map(obj => ({
-          track_id: obj.track_id,
-          bbox: obj.bbox,
-          className: obj.className,
-          confidence: obj.confidence,
-          threat: obj.threat,
-          rank: obj.rank
+        console.log('객체 업데이트:', newObjects.map(o => ({
+          track_id: o.track_id,
+          threat: o.threat,
+          rank: o.rank,
+          direction: o.direction
         })));
-        if (this.lastProcessedObjects !== objectsHash) {
-          this.lastProcessedObjects = objectsHash;
-          console.log('객체 업데이트:', newObjects.map(o => ({ track_id: o.track_id, threat: o.threat, rank: o.rank })));
-        }
       },
       deep: true
     }
@@ -84,7 +74,7 @@ export default {
       return name;
     },
     formatLocation(bbox) {
-      if (!bbox) return '--';
+      if (!bbox || bbox.length !== 4) return '--';
       const x = Math.round((bbox[0] + bbox[2]) / 2);
       const y = Math.round((bbox[1] + bbox[3]) / 2);
       return `(${x}, ${y})`;
@@ -97,6 +87,15 @@ export default {
         this.selectedObjectId = objId;
       }
       this.$emit('object-selected', this.selectedObjectId ? obj : null);
+    },
+    threatClass(threat) {
+      return {
+        'threat-level-3': threat === 'LEVEL 3',
+        'threat-level-2': threat === 'LEVEL 2',
+        'threat-level-1': threat === 'LEVEL 1',
+        'threat-normal': threat === 'Normal' || !threat,
+        'threat-pending': !threat
+      };
     }
   }
 }
@@ -204,13 +203,8 @@ h3 {
   color: gray;
 }
 
-.threat-none {
-  color: #666;
-}
-
 .threat-pending {
   color: #666;
-  position: relative;
 }
 
 .priority-cell {
@@ -236,17 +230,6 @@ h3 {
   font-family: monospace;
   color: #ffffff;
   background-color: rgba(0, 255, 0, 0.05);
-}
-
-.loading-spinner {
-  display: inline-block;
-  margin-left: 5px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
 }
 
 @media (max-width: 768px) {
