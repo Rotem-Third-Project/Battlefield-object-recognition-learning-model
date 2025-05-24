@@ -47,10 +47,11 @@ export default {
 <style scoped>
 .crosshair-container {
   position: absolute;
-  top: 50%;
+  top: 60%;
   left: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  z-index: 10;
 }
 
 canvas {
