@@ -1,36 +1,42 @@
 import os
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # KMP 라이브러리 중복 로드 관련 경고 방지
 
-from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile #, WebSocket  # WebSocket은 사용 안 함
-from fastapi.responses import JSONResponse, HTMLResponse #, StreamingResponse  # StreamingResponse는 주석 처리된 video_feed에서만 사용
+# FastAPI 관련 임포트
+from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from ultralytics import YOLO  # YOLO 관련 임포트 주석 해제
-from pathlib import Path
-from datetime import datetime
-# from contextlib import asynccontextmanager  # 주석 처리된 lifespan에서만 사용
-from utils.network import get_local_ip
-from models.detect import process_image_array  # YOLO 객체 감지 함수 주석 해제
 from fastapi.middleware.cors import CORSMiddleware
+
+# YOLO 객체 감지 관련
+from ultralytics import YOLO
+from models.detect import process_image_array
+
+# 유틸리티
+from pathlib import Path
 import logging
 from typing import List, Dict, Optional
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger("app.main")
 
-import tensorflow as tf  # TensorFlow 관련 임포트 주석 처리
-import asyncio
-# import mss  # 주석 처리된 capture_loop에서만 사용
+# 이미지 처리 관련
 import cv2
 import numpy as np
-import threading
-import time
-import os
-import io
 from PIL import Image
 import base64
+
+# 비동기 처리
+import asyncio
+import threading
+import time
+
+# 모델 로드
+import tensorflow as tf
 
 ############################################################
 # 🛰️ FastAPI 앱 & 리소스 초기화
@@ -77,27 +83,6 @@ except Exception as e:
 efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile=False)
 
 ############################################################
-# 🖼️ 이미지 처리 설정
-############################################################
-
-# disp_x, disp_y = 2560, 1440  # disp_x, disp_y는 어디에서도 참조되지 않음
-size_x, size_y = 2560, 1440  # 작업표시줄 높이(40px)를 제외한 전체화면 크기
-DESIRED_SIZE = (size_x, size_y)
-
-# FPS = 120  # 주석 처리된 코드에서만 사용
-# INTERVAL = 1.0 / FPS  # 주석 처리된 코드에서만 사용
-
-ROI = {
-    'top':    0,  # 상단에서 시작
-    'left':   0,  # 좌측에서 시작
-    'width':  size_x,  # 전체 가로 크기
-    'height': size_y  # 작업표시줄을 제외한 세로 크기
-}
-
-# capture_q = asyncio.Queue(maxsize=2)  # 주석 처리된 코드에서만 사용
-# stream_q = asyncio.Queue(maxsize=2)  # 주석 처리된 코드에서만 사용
-
-############################################################
 # 🧠 상태 변수들
 ############################################################
 
@@ -123,7 +108,11 @@ simulator_status = {
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
-    "is_info_received": False
+    "is_info_received": False,
+    "last_info_time": 0,
+    "player_turret_y": 0.0,
+    "player_turret_x": 0.0,
+    "turret_pitch": 0.0
 }
 def set_target(val: float):
     global TARGET
@@ -339,20 +328,12 @@ async def detect_objects_with_postprocessing():
 
 
 # 📌 상태 정보 제공 (HUD.js가 사용)
-# @app.get("/get_status")
-# async def get_status():
-#     simulator_status["turret_pitch"] = turret_pitch_angle
-#     return {
-#         **simulator_status,
-#         "ROI": ROI,
-#         "size_x": size_x,
-#         "size_y": size_y
-#     }
-
-# 📌 HEAD 메서드 지원을 위한 더미 엔드포인트 (Vue 프론트엔드용)
-@app.api_route("/get_status", methods=["GET", "HEAD"])
-async def get_status_dummy():
-    return {"status": "online"}
+@app.get("/get_status")
+async def get_status():
+    simulator_status["turret_pitch"] = turret_pitch_angle
+    return {
+        **simulator_status,
+    }
 
 # 📌 시뮬레이터 정보 수신
 @app.post("/info")
@@ -367,103 +348,10 @@ async def receive_simulator_info(request: Request):
     simulator_status["distance"] = data.get("distance", simulator_status["distance"])
     simulator_status["is_info_received"] = True
     simulator_status["last_info_time"] = time.time()
+    simulator_status["player_turret_y"] = data.get("playerTurretY", simulator_status["player_turret_y"])
+    simulator_status["player_turret_x"] = data.get("playerTurretX", simulator_status["player_turret_x"])
     return {"status": "success"}
 
-# 📌 ROI 설정 API (웹에서 ROI 변경 가능)
-@app.post("/set_roi")
-async def set_roi(request: Request):
-    global size_x, size_y, DESIRED_SIZE
-    data = await request.json()
-    ROI["top"] = int(data.get("top", ROI["top"]))
-    ROI["left"] = int(data.get("left", ROI["left"]))
-    ROI["width"] = int(data.get("width", ROI["width"]))
-    ROI["height"] = int(data.get("height", ROI["height"]))
-
-    size_x = ROI["width"]
-    size_y = ROI["height"]
-    DESIRED_SIZE = (size_x, size_y)
-
-    return {"status": "success", "ROI": ROI}
-
-############################################################
-# 🎯 비동기 캡처 & 인코딩 루프
-############################################################
-
-# async def capture_loop():
-#     with mss.mss() as sct:
-#         while True:
-#             img = sct.grab(ROI.copy())
-#             await capture_q.put(img)
-#             await asyncio.sleep(INTERVAL)
-
-# async def encode_loop():
-#     while True:
-#         sct_img = await capture_q.get()
-
-#         arr = np.frombuffer(sct_img.rgb, dtype=np.uint8).reshape(
-#             sct_img.height, sct_img.width, 3)
-#         arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-
-#         arr = await process_image_array(
-#             image=arr,
-#             yolo_model=yolo_model,
-#             efficientnet_model=efficientnet_model,
-#             crosshair_path=CROSSHAIR_PATH,
-#             tmp_path=TEMP_PATH,
-#             detected_objects=detected_objects,
-#             horizontal_command_queue=horizontal_command_queue,
-#             set_target_callback=set_target
-#         )
-
-#         small = cv2.resize(arr, DESIRED_SIZE, interpolation=cv2.INTER_LINEAR)
-#         _, jpeg = cv2.imencode('.jpg', small, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-#         await stream_q.put(jpeg.tobytes())
-
-#         await asyncio.sleep(0)
-
-# async def generate_mjpeg():
-#     while True:
-#         frame = await stream_q.get()
-#         yield (b'--frame\r\n'
-#                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-#         await asyncio.sleep(0)
-
-# @app.get("/video_feed")
-# async def video_feed():
-#     return StreamingResponse(generate_mjpeg(),
-#                              media_type='multipart/x-mixed-replace; boundary=frame')
-
-############################################################
-# 🔄 lifespan: 서버 시작 시 캡처 & 인코드 시작
-############################################################
-
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # WebRTC로 전환했으므로 capture_loop 비활성화
-#     # asyncio.create_task(capture_loop())
-#     asyncio.create_task(encode_loop())
-#     yield
-
-# app.router.lifespan_context = lifespan
-
-############################################################
-# 🏁 서버 실행 설정
-############################################################
-
-SERVER_IP = get_local_ip()
-DASHBOARD_URL = f"http://{SERVER_IP}:5000/dashboard"
-
-def monitor_info_status():
-    while True:
-        last_time = simulator_status.get("last_info_time", 0)
-        if time.time() - last_time > 3:
-            simulator_status["is_info_received"] = False
-        time.sleep(1)
-
-threading.Thread(target=monitor_info_status, daemon=True).start()
-
 if __name__ == "__main__":
-    print("🖥️ 대시보드 접속 주소:")
-    print(f"👉 {DASHBOARD_URL}")
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000, access_log=False)
