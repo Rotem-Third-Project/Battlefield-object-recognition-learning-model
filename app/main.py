@@ -305,8 +305,24 @@ async def detect_objects_with_postprocessing():
         confirmed_objects = []
         if crop_imgs:
             await process_crop_batch_async(crop_imgs, track_ids, pending_objects, confirmed_objects)
-        remaining_objects = [obj for obj in detected_objects if obj["track_id"] not in pending_objects or obj["className"] != "enemy"]
+        remaining_objects = [
+            obj for obj in detected_objects 
+            if obj["track_id"] not in pending_objects or obj["className"] != "enemy"
+        ]
         local_processed_objects = confirmed_objects + remaining_objects
+
+        ####### ==== 중복 제거 추가 ==== #######
+        # track_id 기준으로 가장 마지막 객체만 남김
+        unique_objects = {}
+        for obj in local_processed_objects:
+            tid = obj.get("track_id")
+            if tid is not None:
+                unique_objects[tid] = obj
+            else:
+                # track_id 없는 객체는 hash로 분리
+                unique_objects[id(obj)] = obj
+        local_processed_objects = list(unique_objects.values())
+        ####### ===================== #######
         local_processed_objects = calculate_priorities(local_processed_objects)
         with cropped_images_lock:
             detected_objects[:] = local_processed_objects
@@ -319,6 +335,7 @@ async def detect_objects_with_postprocessing():
     except Exception as e:
         logger.error(f"❌ 객체 감지 및 후처리 오류: {str(e)}")
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
+
 
 
 # 📌 상태 정보 제공 (HUD.js가 사용)
