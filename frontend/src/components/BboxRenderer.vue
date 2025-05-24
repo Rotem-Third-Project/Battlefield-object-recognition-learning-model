@@ -50,22 +50,29 @@ export default {
       ctx: null,
       animationFrameId: null,
       lastObjectsCount: 0,
-      lastRenderedObjects: null, // 마지막으로 렌더링된 객체 상태 저장
-      lastRenderTime: 0, // 마지막 렌더링 타임스탬프
-      colors: {
-        'enemy': '#ff0000',   // 적군 - 빨강
-        'car': '#00ff00',     // 차량 - 초록
-        'truck': '#0000ff',   // 트럭 - 파랑
-        'rock': '#ffff00'     // 바위 - 노랑
-      },
-      threatStyles: {
+      lastRenderedObjects: null,
+      lastRenderTime: 0,
+      renderQueue: [],
+      isRendering: false,
+      colors: Object.freeze({
+        'enemy': '#ff0000',
+        'car': '#00ff00',
+        'truck': '#0000ff',
+        'rock': '#ffff00'
+      }),
+      threatStyles: Object.freeze({
         'LEVEL 3': { lineWidth: 4, lineDash: [], label: '위험' },
         'LEVEL 2': { lineWidth: 3, lineDash: [], label: '주의' },
         'LEVEL 1': { lineWidth: 2, lineDash: [], label: '관찰' },
-        'Normal': { lineWidth: 2, lineDash: [5, 5], label: '안전' } // 선 두께 증가
-      },
+        'Normal': { lineWidth: 2, lineDash: [5, 5], label: '안전' }
+      }),
       redrawCounter: 0,
-      renderError: null
+      renderError: null,
+      objectPool: new Map(),
+      lastFrameTime: 0,
+      fps: 0,
+      frameCount: 0,
+      lastFpsUpdate: 0
     }
   },
   computed: {
@@ -107,6 +114,11 @@ export default {
     if (this.debugMode) {
       console.log(`📐 BboxRenderer 마운트됨: ${this.width}x${this.height}`)
       console.log(`📏 초기 스케일: X=${this.scaleX}, Y=${this.scaleY}`)
+      
+      // FPS 표시를 위한 디버그 정보
+      setInterval(() => {
+        console.log(`🔄 현재 FPS: ${this.fps}`)
+      }, 5000)
     }
   },
   methods: {
@@ -182,17 +194,34 @@ export default {
           const now = performance.now();
           const objects = this.detectedObjects;
           
-          // 객체의 변경 여부 확인 (최적화)
-          const shouldRender = this.shouldRenderFrame(objects, now);
+          // FPS 제한 (최대 60FPS)
+          const delta = now - this.lastFrameTime;
+          const fpsInterval = 1000 / 60; // 60FPS
           
-          // 변경된 경우에만 다시 그리기
-          if (shouldRender) {
-            this.drawBboxes();
-            this.lastRenderedObjects = JSON.stringify(objects);
-            this.lastRenderTime = now;
+          if (delta > fpsInterval) {
+            this.lastFrameTime = now - (delta % fpsInterval);
             
-            if (this.debugMode) {
-              console.log(`🔄 Bbox 다시 그리기: ${objects.length}개 객체`);
+            // 객체의 변경 여부 확인 (최적화)
+            const shouldRender = this.shouldRenderFrame(objects, now);
+            
+            // 변경된 경우에만 다시 그리기
+            if (shouldRender) {
+              this.drawBboxes();
+              this.lastRenderedObjects = JSON.stringify(objects);
+              this.lastRenderTime = now;
+              
+              if (this.debugMode) {
+                console.log(`🔄 Bbox 다시 그리기: ${objects.length}개 객체 (${Math.round(1000/delta)} FPS)`);
+              }
+            }
+            
+            // 렌더링 대기 중인 프레임 처리
+            if (this.renderQueue.length > 0) {
+              const nextFrame = this.renderQueue.pop();
+              this.renderQueue = []; // 큐 클리어
+              this.$nextTick(() => {
+                this.drawBboxes();
+              });
             }
           }
           
@@ -220,12 +249,37 @@ export default {
         return
       }
       
+      // FPS 계산
+      const now = performance.now()
+      this.frameCount++
+      
+      // 1초마다 FPS 업데이트
+      if (now - this.lastFpsUpdate > 1000) {
+        this.fps = Math.round((this.frameCount * 1000) / (now - this.lastFpsUpdate))
+        this.frameCount = 0
+        this.lastFpsUpdate = now
+        if (this.debugMode) {
+          console.log(`🔄 FPS: ${this.fps}`)
+        }
+      }
+      
+      // 이미 렌더링 중이면 큐에 추가하고 리턴
+      if (this.isRendering) {
+        this.renderQueue.push(this.detectedObjects)
+        return
+      }
+      
+      this.isRendering = true
+      
       try {
-        // 캔버스 초기화
+        // 캔버스 초기화 (전체 지우기 대신 dirty rectangle 사용 고려)
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
         
         // 객체가 없으면 종료
-        if (!this.detectedObjects || this.detectedObjects.length === 0) return
+        if (!this.detectedObjects || this.detectedObjects.length === 0) {
+          this.isRendering = false
+          return
+        }
         
         // 테두리 표시를 위한 가이드라인 그리기 (디버그 모드)
         if (this.debugMode) {
@@ -291,6 +345,8 @@ export default {
           
           this.ctx.restore()
         })
+        
+        this.isRendering = false
       } catch (error) {
         console.error('바운딩 박스 그리기 오류:', error)
         this.renderError = error.message
@@ -316,25 +372,52 @@ export default {
     
     // 최적화: 프레임 렌더링 필요 여부 판단
     shouldRenderFrame(objects, now) {
-      // 첫 번째 렌더링이거나 이전 렌더링 정보가 없는 경우
-      if (!this.lastRenderedObjects) {
+      // 객체가 없으면 렌더링 불필요
+      if (!objects || objects.length === 0) return false;
+      
+      // 객체 개수가 변경되었으면 렌더링
+      if (objects.length !== this.lastObjectsCount) {
+        this.lastObjectsCount = objects.length;
         return true;
       }
       
-      // 60fps 기준으로 16ms마다 렌더링 (고성능 렌더링 원할 경우)
-      // const timeSinceLastRender = now - this.lastRenderTime;
-      // if (timeSinceLastRender > 100) { // 100ms마다 렌더링 (초당 10회)
-      //   return true;
-      // }
-      
-      // 객체 수가 변경된 경우
-      if (objects.length !== JSON.parse(this.lastRenderedObjects).length) {
-        return true;
+      // 60FPS로 제한 (16ms마다)
+      if (now - this.lastRenderTime < 16) {
+        return false;
       }
       
-      // 객체 내용이 변경된 경우 (JSON 문자열 비교)
-      const currentObjectsStr = JSON.stringify(objects);
-      return currentObjectsStr !== this.lastRenderedObjects;
+      // 객체 내용이 변경되었는지 확인 (성능을 위해 일부 속성만 비교)
+      const hasChanges = objects.some((obj, index) => {
+        if (!this.objectPool.has(obj.track_id)) {
+          this.objectPool.set(obj.track_id, { ...obj });
+          return true;
+        }
+        
+        const cached = this.objectPool.get(obj.track_id);
+        const changed = (
+          obj.x !== cached.x ||
+          obj.y !== cached.y ||
+          obj.width !== cached.width ||
+          obj.height !== cached.height ||
+          obj.threat !== cached.threat
+        );
+        
+        if (changed) {
+          this.objectPool.set(obj.track_id, { ...obj });
+        }
+        
+        return changed;
+      });
+      
+      // 객체 풀 정리 (더 이상 없는 객체 제거)
+      const activeIds = new Set(objects.map(obj => obj.track_id));
+      for (const id of this.objectPool.keys()) {
+        if (!activeIds.has(id)) {
+          this.objectPool.delete(id);
+        }
+      }
+      
+      return hasChanges;
     }
   },
   beforeDestroy() {

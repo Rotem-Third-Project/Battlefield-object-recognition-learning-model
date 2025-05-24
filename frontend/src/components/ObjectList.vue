@@ -17,12 +17,14 @@
             <td colspan="5" style="text-align: center">위험요소 없음</td>
           </tr>
           <tr v-for="obj in storeObjects" 
-              :key="obj.id || obj.track_id" 
-              :class="[$store.getters.getThreatClass(obj.threat), {'selected': selectedObjectId === obj.id}]"
+              :key="obj.track_id" 
+              :class="[$store.getters.getThreatClass(obj.threat), {'selected': selectedObjectId === obj.track_id}]"
               @click="selectObject(obj)">
             <td>{{ formatClassName(obj) }}</td>
-            <td>{{ obj.track_id || obj.id || '-' }}</td>
-            <td :class="$store.getters.getThreatClass(obj.threat)">{{ obj.threat || 'Normal' }}</td>
+            <td>{{ obj.track_id || '-' }}</td>
+            <td :class="$store.getters.getThreatClass(obj.threat)">
+              {{ obj.threat || 'Pending' }}
+            </td>
             <td class="location-cell">{{ formatLocation(obj.bbox) }}</td>
             <td :class="['priority-cell', `rank-${obj.rank || '3'}`]">{{ obj.rank || '-' }}</td>
           </tr>
@@ -37,46 +39,64 @@ export default {
   name: 'ObjectList',
   data() {
     return {
-      selectedObjectId: null
+      selectedObjectId: null,
+      processingObjects: new Set(),
+      lastProcessedObjects: null,
+      retryCounts: new Map(),
+      cropCache: new Map()
     }
   },
   computed: {
-    // Vuex 스토어에서 탐지된 객체 데이터 가져오기
     storeObjects() {
       return this.$store.state.detectedObjects || []
     }
   },
+  watch: {
+    storeObjects: {
+      handler(newObjects) {
+        const objectsHash = JSON.stringify(newObjects.map(obj => ({
+          track_id: obj.track_id,
+          bbox: obj.bbox,
+          className: obj.className,
+          confidence: obj.confidence,
+          threat: obj.threat,
+          rank: obj.rank
+        })));
+        if (this.lastProcessedObjects !== objectsHash) {
+          this.lastProcessedObjects = objectsHash;
+          console.log('객체 업데이트:', newObjects.map(o => ({ track_id: o.track_id, threat: o.threat, rank: o.rank })));
+        }
+      },
+      deep: true
+    }
+  },
   methods: {
     formatClassName(obj) {
-      if (!obj.className) return '알 수 없음'
-      
-      // 신뢰도 정보가 있으면 표시
-      let name = obj.className
+      if (!obj.className) return '알 수 없음';
+      let name = obj.className;
       if (obj.confidence) {
-        const confidence = Math.round(obj.confidence * 100)
-        name += ` (${confidence}%)`
+        const confidence = Math.round(obj.confidence * 100);
+        name += ` (${confidence}%)`;
       }
-      return name
+      if (obj.direction && obj.direction !== 'unknown') {
+        name += ` [${obj.direction}]`;
+      }
+      return name;
     },
     formatLocation(bbox) {
-      if (!bbox) return '--'
-      const x = Math.round((bbox[0] + bbox[2]) / 2)
-      const y = Math.round((bbox[1] + bbox[3]) / 2)
-      return `(${x}, ${y})`
+      if (!bbox) return '--';
+      const x = Math.round((bbox[0] + bbox[2]) / 2);
+      const y = Math.round((bbox[1] + bbox[3]) / 2);
+      return `(${x}, ${y})`;
     },
     selectObject(obj) {
-      // 객체 ID 결정 (track_id 또는 id)
-      const objId = obj.track_id || obj.id
-      
-      // 같은 객체를 다시 클릭하면 선택 해제
+      const objId = obj.track_id;
       if (this.selectedObjectId === objId) {
-        this.selectedObjectId = null
+        this.selectedObjectId = null;
       } else {
-        this.selectedObjectId = objId
+        this.selectedObjectId = objId;
       }
-      
-      // 이벤트 발생: 객체 선택 정보를 부모 컴포넌트나 이벤트 버스로 전달
-      this.$emit('object-selected', this.selectedObjectId ? obj : null)
+      this.$emit('object-selected', this.selectedObjectId ? obj : null);
     }
   }
 }
@@ -85,7 +105,7 @@ export default {
 <style scoped>
 .object-list-section {
   width: 100%;
-  height: 100%;
+  height: 50%;
   max-height: 100%;
   overflow-y: auto;
   background-color: rgba(0, 255, 0, 0.05);
@@ -131,11 +151,11 @@ h3 {
   color: #00ff00;
 }
 
-#object-list th:nth-child(1) { width: 35%; } /* 클래스명 */
-#object-list th:nth-child(2) { width: 10%; } /* ID */
-#object-list th:nth-child(3) { width: 20%; } /* 위험등급 */
-#object-list th:nth-child(4) { width: 20%; } /* 위치 */
-#object-list th:nth-child(5) { width: 15%; } /* 우선순위 */
+#object-list th:nth-child(1) { width: 35%; }
+#object-list th:nth-child(2) { width: 10%; }
+#object-list th:nth-child(3) { width: 20%; }
+#object-list th:nth-child(4) { width: 20%; }
+#object-list th:nth-child(5) { width: 15%; }
 
 #object-list th,
 #object-list td {
@@ -188,6 +208,11 @@ h3 {
   color: #666;
 }
 
+.threat-pending {
+  color: #666;
+  position: relative;
+}
+
 .priority-cell {
   font-weight: bold;
 }
@@ -213,9 +238,20 @@ h3 {
   background-color: rgba(0, 255, 0, 0.05);
 }
 
+.loading-spinner {
+  display: inline-block;
+  margin-left: 5px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 @media (max-width: 768px) {
   .object-list-section {
     display: none;
   }
 }
-</style> 
+</style>
