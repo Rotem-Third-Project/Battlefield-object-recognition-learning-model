@@ -332,22 +332,6 @@ export default {
           // 라벨 그리기
           this.drawLabel(scaledX1, scaledY1 - 25, label, color)
           
-          // 위험 등급 표시 (있는 경우만)
-          if (threatLabel) {
-            this.drawLabel(scaledX1, scaledY1 - 5, threatLabel, color)
-          }
-          
-          // 트래킹 ID가 있으면 표시
-          if (obj.track_id) {
-            const trackLabel = `ID: ${obj.track_id}`
-            this.drawLabel(scaledX1, scaledY2 + 5, trackLabel, 'rgba(0, 0, 0, 0.7)', '#ffffff')
-          }
-          
-          this.ctx.restore()
-        })
-        
-        this.isRendering = false
-      } catch (error) {
         console.error('바운딩 박스 그리기 오류:', error)
         this.renderError = error.message
       }

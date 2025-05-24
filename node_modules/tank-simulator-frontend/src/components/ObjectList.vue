@@ -8,13 +8,12 @@
             <th>클래스명</th>
             <th>ID</th>
             <th>위험등급</th>
-            <th>위치</th>
             <th>우선순위</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="storeObjects.length === 0">
-            <td colspan="5" style="text-align: center">위험요소 없음</td>
+            <td colspan="4" style="text-align: center">위험요소 없음</td>
           </tr>
           <tr v-for="obj in storeObjects" 
               :key="obj.track_id" 
@@ -25,7 +24,6 @@
             <td :class="$store.getters.getThreatClass(obj.threat)">
               {{ obj.threat || 'Pending' }}
             </td>
-            <td class="location-cell">{{ formatLocation(obj.bbox) }}</td>
             <td :class="['priority-cell', `rank-${obj.rank || '3'}`]">{{ obj.rank || '-' }}</td>
           </tr>
         </tbody>
@@ -56,7 +54,6 @@ export default {
       handler(newObjects) {
         const objectsHash = JSON.stringify(newObjects.map(obj => ({
           track_id: obj.track_id,
-          bbox: obj.bbox,
           className: obj.className,
           confidence: obj.confidence,
           threat: obj.threat,
@@ -82,12 +79,6 @@ export default {
         name += ` [${obj.direction}]`;
       }
       return name;
-    },
-    formatLocation(bbox) {
-      if (!bbox) return '--';
-      const x = Math.round((bbox[0] + bbox[2]) / 2);
-      const y = Math.round((bbox[1] + bbox[3]) / 2);
-      return `(${x}, ${y})`;
     },
     selectObject(obj) {
       const objId = obj.track_id;
@@ -151,11 +142,10 @@ h3 {
   color: #00ff00;
 }
 
-#object-list th:nth-child(1) { width: 35%; }
-#object-list th:nth-child(2) { width: 10%; }
-#object-list th:nth-child(3) { width: 20%; }
+#object-list th:nth-child(1) { width: 40%; }
+#object-list th:nth-child(2) { width: 15%; }
+#object-list th:nth-child(3) { width: 25%; }
 #object-list th:nth-child(4) { width: 20%; }
-#object-list th:nth-child(5) { width: 15%; }
 
 #object-list th,
 #object-list td {
@@ -232,11 +222,7 @@ h3 {
   background-color: rgba(40, 167, 69, 0.1);
 }
 
-.location-cell {
-  font-family: monospace;
-  color: #ffffff;
-  background-color: rgba(0, 255, 0, 0.05);
-}
+
 
 .loading-spinner {
   display: inline-block;
