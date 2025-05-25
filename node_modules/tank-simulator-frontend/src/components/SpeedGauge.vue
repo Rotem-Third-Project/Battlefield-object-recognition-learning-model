@@ -10,8 +10,8 @@
         </div>
       </div>
       <div class="speed-label">
-        <div class="speed-value">{{ Math.round(status.speed) }}</div>
-        <div class="gear-value" v-if="status.gear_level">{{ status.gear_level }}</div>
+        <div class="speed-value">{{ Math.round(speed) }}</div>
+        <div class="gear-value" v-if="gearLevel">{{ gearLevel }}</div>
         <div class="unit">km/h</div>
       </div>
     </div>
@@ -21,39 +21,25 @@
 <script>
 export default {
   name: 'SpeedGauge',
-  data() {
-    return {
-      status: { speed: 0, gear_level: '' },
-      maxSpeed: 100,
-      ws: null,
-      apiServerUrl: ''
+  props: {
+    speed: {
+      type: Number,
+      default: 0
+    },
+    gearLevel: {
+      type: String,
+      default: ''
+    },
+    maxSpeed: {
+      type: Number,
+      default: 100
     }
   },
   computed: {
     gaugeRotation() {
-      const percentage = Math.min(Math.abs(this.status.speed) / this.maxSpeed, 1)
-      return percentage * 180 - 90 // -90도에서 시작하여 90도까지 회전
+      const percentage = Math.min(Math.abs(this.speed) / this.maxSpeed, 1);
+      return percentage * 180 - 90; // -90도에서 시작하여 90도까지 회전
     }
-  },
-  mounted() {
-    this.connectWebSocket();
-  },
-  methods: {
-    connectWebSocket() {
-      const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.hostname + ':5000/get_status';
-      this.ws = new WebSocket(wsUrl);
-      this.ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        this.status.speed = (data.player_speed || 0) * 3.6;
-        this.status.gear_level = data.gear_level || '';
-      };
-      this.ws.onclose = () => {
-        setTimeout(this.connectWebSocket, 1000); // 재연결
-      };
-    }
-  },
-  beforeDestroy() {
-    if (this.ws) this.ws.close();
   }
 }
 </script>
