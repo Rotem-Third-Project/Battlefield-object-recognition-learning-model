@@ -10,7 +10,7 @@
         </div>
       </div>
       <div class="speed-label">
-        <div class="speed-value">{{ Math.round(speed) }}</div>
+        <div class="speed-value">{{ Math.round(speed * 3.7) }}</div>
         <div class="gear-value" v-if="gearLevel">{{ gearLevel }}</div>
         <div class="unit">km/h</div>
       </div>
@@ -37,8 +37,11 @@ export default {
   },
   computed: {
     gaugeRotation() {
-      const percentage = Math.min(Math.abs(this.speed) / this.maxSpeed, 1);
-      return percentage * 180 - 90; // -90도에서 시작하여 90도까지 회전
+      // 속도 값을 3.7배로 부풀림
+      const boostedSpeed = Math.abs(this.speed) * 3.7;
+      const percentage = boostedSpeed / this.maxSpeed;
+      // 게이지 회전 각도 제한 (-90도에서 90도 사이)
+      return Math.min(Math.max(percentage * 180 - 90, -90), 90);
     }
   }
 }
@@ -94,7 +97,7 @@ export default {
   left: 50%;
   bottom: 0;
   transform-origin: bottom center;
-  transition: transform 0.3s ease-out;
+  transition: transform 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .gauge-marker::after {
