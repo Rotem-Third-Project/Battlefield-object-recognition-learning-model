@@ -15,13 +15,12 @@
       <div class="video-overlay">
         <CrosshairCanvas v-if="videoMounted && showCrosshair" />
         <SpeedGauge
-          v-if="showSpeedGauge && speed !== undefined"
           :speed="speed"
           :maxSpeed="100"
           class="speed-gauge"
         />
         <TurretCrosshair :turret-x="turretX" :turret-y="turretY" :locked-angle="lockedAngle" />
-        <SignalStrength :signalStrength="signal" />
+        <SignalStrength :signalStrength="signal" class="signal-indicator" />
       </div>
       <!-- 👇 기존 컴포넌트들 -->
       <FrameCapture
@@ -63,6 +62,7 @@ import SpeedGauge from '@/components/SpeedGauge.vue'
 import TurretCrosshair from '@/components/TurretCrosshair.vue'
 import SignalStrength from '@/components/SignalStrength.vue'
 
+
 export default {
   name: 'VideoSection',
   components: {
@@ -71,7 +71,7 @@ export default {
     CrosshairCanvas,
     SpeedGauge,
     TurretCrosshair,
-    SignalStrength
+    SignalStrength,
   },
   props: {
     videoFeedUrl: String,

@@ -130,16 +130,18 @@ export default {
 .compass-x {
   position: absolute;
   bottom: 40px;
-  width: 100%;
+  width: 60%;
   height: 60px;
   overflow: hidden;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .center-line {
   position: absolute;
   left: 50%;
   width: 2px;
-  height: 100%;
+  height: 50%;
   background: red;
   z-index: 2;
 }

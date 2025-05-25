@@ -1,14 +1,23 @@
 <template>
-  <div class="hud-item" id="comm">
-    <div>📡 통신 신호</div>
-    <div class="signal-bar" style="position: relative">
-      <div
-        v-for="n in 4"
+  <div class="military-signal">
+    <div class="signal-header">
+      <span class="signal-icon">📡</span>
+      <span class="signal-label">COMMS</span>
+    </div>
+    <div class="signal-bars">
+      <div 
+        v-for="n in 4" 
         :key="n"
         class="bar"
-        :class="{ active: signalStrength >= n }"
+        :class="{
+          'bar-weak': signalStrength >= n && signalStrength <= 2,
+          'bar-strong': signalStrength >= n && signalStrength > 2,
+          'bar-critical': signalStrength === 0 && n === 1
+        }"
       ></div>
-      <div id="signal-error-icon" v-if="signalStrength === 0">✖</div>
+    </div>
+    <div class="signal-status" v-if="signalStrength === 0">
+      <span class="pulse">SIGNAL LOST</span>
     </div>
   </div>
 </template>
@@ -28,49 +37,98 @@ export default {
 </script>
 
 <style scoped>
-.hud-item {
+.military-signal {
   position: absolute;
-  top: 10px;
-  right: 20px;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  max-width: 150px;      /* 최대 너비 제한 */
-  margin-left: 20px;
-  background-color: #ffffff; /* 검은색, 50% 투명 */
-  border-radius: 4px; /* 모서리 살짝 둥글게 (선택사항) */
+  top: 5px;
+  right: 5px;
+  background: rgba(0, 20, 20, 0.9);
+  border: 1px solid #00ff00;
+  border-radius: 2px;
+  padding: 3px 6px;
+  font-family: 'Courier New', monospace;
+  color: #00ff00;
+  font-size: 10px;
+  text-transform: uppercase;
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+  min-width: 80px;
+  backdrop-filter: blur(2px);
 }
-.signal-bar {
+
+.signal-header {
   display: flex;
-  gap: 4px;
-  height: 30px;
-  max-width: 150px; 
-  margin-left: 20px;
+  align-items: center;
+  margin-bottom: 3px;
+  letter-spacing: 0.5px;
+}
+
+.signal-icon {
+  font-size: 10px;
+  margin-right: 3px;
+  transform: scale(0.8);
+}
+
+.signal-label {
+  flex-grow: 1;
+  font-weight: bold;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+}
+
+.signal-bars {
+  display: flex;
+  gap: 3px;
+  height: 12px;
   align-items: flex-end;
-  position: relative;
 }
 
 .bar {
-  width: 8px;
-  height: 8px;
-  background-color: lightgray;
-  transition: all 0.3s;
+  width: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid #00ff00;
+  transition: all 0.2s ease;
 }
 
-.bar:nth-child(1) { height: 8px; }
-.bar:nth-child(2) { height: 14px; }
-.bar:nth-child(3) { height: 20px; }
-.bar:nth-child(4) { height: 26px; }
+.bar:nth-child(1) { height: 3px; }
+.bar:nth-child(2) { height: 6px; }
+.bar:nth-child(3) { height: 9px; }
+.bar:nth-child(4) { height: 12px; }
 
-.bar.active {
-  background-color: limegreen;
+.bar-weak {
+  background: #ffcc00;
+  box-shadow: 0 0 5px #ffcc00;
 }
 
-#signal-error-icon {
-  position: absolute;
-  right: -20px;
-  top: 0;
-  color: red;
-  font-size: 20px;
+.bar-strong {
+  background: #00ff00;
+  box-shadow: 0 0 8px #00ff00;
+}
+
+.bar-critical {
+  background: #ff0000;
+  animation: criticalPulse 1s infinite;
+}
+
+.signal-status {
+  margin-top: 2px;
+  text-align: center;
+  font-size: 8px;
+  color: #ff0000;
+  text-shadow: 0 0 3px rgba(255, 0, 0, 0.7);
+  line-height: 1;
+}
+
+.pulse {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+@keyframes criticalPulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
 }
 </style>
