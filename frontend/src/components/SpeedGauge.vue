@@ -10,8 +10,8 @@
         </div>
       </div>
       <div class="speed-label">
-        <div class="speed-value">{{ Math.round(status.speed) }}</div>
-        <div class="gear-value" v-if="status.gear_level">{{ status.gear_level }}</div>
+        <div class="speed-value">{{ Math.round(speed * 3.7) }}</div>
+        <div class="gear-value" v-if="gearLevel">{{ gearLevel }}</div>
         <div class="unit">km/h</div>
       </div>
     </div>
@@ -21,39 +21,28 @@
 <script>
 export default {
   name: 'SpeedGauge',
-  data() {
-    return {
-      status: { speed: 0, gear_level: '' },
-      maxSpeed: 100,
-      ws: null,
-      apiServerUrl: ''
+  props: {
+    speed: {
+      type: Number,
+      default: 0
+    },
+    gearLevel: {
+      type: String,
+      default: ''
+    },
+    maxSpeed: {
+      type: Number,
+      default: 100
     }
   },
   computed: {
     gaugeRotation() {
-      const percentage = Math.min(Math.abs(this.status.speed) / this.maxSpeed, 1)
-      return percentage * 180 - 90 // -90도에서 시작하여 90도까지 회전
+      // 속도 값을 3.7배로 부풀림
+      const boostedSpeed = Math.abs(this.speed) * 3.7;
+      const percentage = boostedSpeed / this.maxSpeed;
+      // 게이지 회전 각도 제한 (-90도에서 90도 사이)
+      return Math.min(Math.max(percentage * 180 - 90, -90), 90);
     }
-  },
-  mounted() {
-    this.connectWebSocket();
-  },
-  methods: {
-    connectWebSocket() {
-      const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.hostname + ':5000/get_status';
-      this.ws = new WebSocket(wsUrl);
-      this.ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        this.status.speed = (data.player_speed || 0) * 3.6;
-        this.status.gear_level = data.gear_level || '';
-      };
-      this.ws.onclose = () => {
-        setTimeout(this.connectWebSocket, 1000); // 재연결
-      };
-    }
-  },
-  beforeDestroy() {
-    if (this.ws) this.ws.close();
   }
 }
 </script>
@@ -108,7 +97,7 @@ export default {
   left: 50%;
   bottom: 0;
   transform-origin: bottom center;
-  transition: transform 0.3s ease-out;
+  transition: transform 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .gauge-marker::after {

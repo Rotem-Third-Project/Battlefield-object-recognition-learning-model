@@ -89,14 +89,12 @@ efficientnet_model = tf.keras.models.load_model(EFFICIENTNET_MODEL_PATH, compile
 cropped_images = {}  # {track_id: base64_image}
 cropped_images_lock = threading.Lock()
 move_command_queue = []
-# action_command_queue = []  # 사용되지 않음
 horizontal_command_queue = []
 vertical_command_queue = []
 bullet_logs = []
 turret_pitch_angle = 0.0
 gear_level = 2
 gear_weights = {1: 0.3, 2: 0.6, 3: 1.0}
-# current_position = (60, 27)  # 사용되지 않음
 last_turret_y = None
 TARGET = 9.42  # 초기값
 
@@ -108,8 +106,6 @@ simulator_status = {
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
-    "is_info_received": False,
-    "last_info_time": 0,
     "player_turret_y": 0.0,
     "player_turret_x": 0.0,
     "turret_pitch": 0.0
@@ -167,7 +163,6 @@ async def get_action():
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {
-        "roi": ROI,
         "objects": detected_objects
     }
 
@@ -346,8 +341,6 @@ async def receive_simulator_info(request: Request):
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
     simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
     simulator_status["distance"] = data.get("distance", simulator_status["distance"])
-    simulator_status["is_info_received"] = True
-    simulator_status["last_info_time"] = time.time()
     simulator_status["player_turret_y"] = data.get("playerTurretY", simulator_status["player_turret_y"])
     simulator_status["player_turret_x"] = data.get("playerTurretX", simulator_status["player_turret_x"])
     return {"status": "success"}

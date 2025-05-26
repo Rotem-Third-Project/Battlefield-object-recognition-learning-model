@@ -15,13 +15,13 @@
       <div class="video-overlay">
         <CrosshairCanvas v-if="videoMounted && showCrosshair" />
         <SpeedGauge
-          v-if="showSpeedGauge && speed !== undefined"
           :speed="speed"
-          :maxSpeed="100"
+          :gear-level="gear"
+          :max-speed="100"
           class="speed-gauge"
         />
         <TurretCrosshair :turret-x="turretX" :turret-y="turretY" :locked-angle="lockedAngle" />
-        <SignalStrength :signalStrength="signal" />
+        <SignalStrength :signalStrength="signal" class="signal-indicator" />
       </div>
       <!-- 👇 기존 컴포넌트들 -->
       <FrameCapture
@@ -63,6 +63,7 @@ import SpeedGauge from '@/components/SpeedGauge.vue'
 import TurretCrosshair from '@/components/TurretCrosshair.vue'
 import SignalStrength from '@/components/SignalStrength.vue'
 
+
 export default {
   name: 'VideoSection',
   components: {
@@ -71,7 +72,7 @@ export default {
     CrosshairCanvas,
     SpeedGauge,
     TurretCrosshair,
-    SignalStrength
+    SignalStrength,
   },
   props: {
     videoFeedUrl: String,
@@ -324,8 +325,14 @@ export default {
         }
         const data = await res.json();
         this.speed = data.player_speed || 0;
+        if (data.gear_level !== undefined) {
+          this.gear = data.gear_level;
+        }
         if (data.player_turret_y !== undefined) {
           this.turretY = data.player_turret_y;
+        }
+        if (data.player_turret_x !== undefined) {
+          this.turretX = data.player_turret_x;
         }
       } catch (error) {
         console.error('상태 정보 불러오기 실패:', error);

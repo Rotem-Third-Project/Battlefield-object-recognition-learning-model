@@ -440,7 +440,7 @@ export default {
 
 .bbox-canvas {
   position: absolute;
-  top: 0;
+  top: 10px; /* 상단 여백 */
   left: 0;
   width: 100%;
   height: 100%;

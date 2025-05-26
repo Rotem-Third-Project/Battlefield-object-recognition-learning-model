@@ -1,5 +1,17 @@
 <template>
   <div class="dashboard">
+    <header class="dashboard-header">
+      <div class="logo">
+        <svg width="40" height="40" viewBox="0 0 100 100" class="logo-icon">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#00ff00" stroke-width="4"/>
+          <circle cx="50" cy="50" r="30" fill="none" stroke="#00ff00" stroke-width="3" stroke-dasharray="5,5"/>
+          <circle cx="50" cy="50" r="15" fill="#00ff00" opacity="0.7"/>
+          <line x1="10" y1="50" x2="90" y2="50" stroke="#00ff00" stroke-width="3"/>
+          <line x1="50" y1="10" x2="50" y2="90" stroke="#00ff00" stroke-width="3"/>
+        </svg>
+      </div>
+      <h1 class="app-title">T-Trac</h1>
+    </header>
     <div class="main-content">
       <div class="left-panel">
         <VideoSection
@@ -93,8 +105,54 @@ export default {
   width: 100vw;
   height: 100vh;
   margin: 0;
+  padding: 0;
   overflow: hidden;
+  background-color: #1a1a1a;
 }
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #121212;
+  color: #00ff00;
+  padding: 15px 0;
+  border-bottom: 2px solid #00cc00;
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+  z-index: 100;
+  position: relative;
+  width: 100%;
+  margin: 0;
+}
+
+.app-title {
+  margin: 0 0 0 15px;
+  font-size: 2.2rem;
+  font-weight: bold;
+  letter-spacing: 6px;
+  text-shadow: 0 0 15px rgba(0, 255, 0, 0.7);
+  text-align: center;
+  font-family: 'Arial', sans-serif;
+  background: linear-gradient(90deg, #00ff00, #00cc00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+  padding: 0 20px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+}
+
+.logo-icon {
+  filter: drop-shadow(0 0 5px rgba(0, 255, 0, 0.7));
+  transition: transform 0.3s ease;
+}
+
+.logo-icon:hover {
+  transform: rotate(90deg);
+}
+
 .main-content {
   display: flex;
   flex: 1;
