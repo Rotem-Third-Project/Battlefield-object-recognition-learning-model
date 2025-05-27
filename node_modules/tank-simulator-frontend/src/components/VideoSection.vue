@@ -15,7 +15,6 @@
       <div class="video-overlay">
         <CrosshairCanvas v-if="videoMounted && showCrosshair" />
         <SpeedGauge
-
           :speed="speed"
           :maxSpeed="100"
           class="speed-gauge"
@@ -119,10 +118,12 @@ export default {
       apiServerUrl: '',
       speed: 0,
       statusPollingInterval: null,
+      infoPollingInterval: null, // 추가: infoPollingInterval
       currentAngle: 0,
       lockedAngle: null,
       signal: 0,
       turretY: 0,
+      turretX: 0, // 추가: turretX를 data에 추가하여 동적으로 관리
     }
   },
   computed: {
@@ -133,6 +134,9 @@ export default {
   watch: {
     detectedObjects(newObjects) {
       this.objectCount = newObjects.length;
+    },
+    turretX(newVal) {
+      console.log('turretX updated:', newVal); // 디버깅 로그 추가
     }
   },
   mounted() {
@@ -146,6 +150,7 @@ export default {
     this.viewportWidth = window.innerWidth;
     this.viewportHeight = window.innerHeight;
     this.startSpeedPolling();
+    this.startInfoPolling(); // 추가: startInfoPolling 호출
   },
   methods: {
     debounce(fn, delay) {
@@ -270,22 +275,40 @@ export default {
       try {
         const res = await fetch(`${this.apiServerUrl}/get_status`, {
           method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          }
+          headers: { 'Accept': 'application/json' }
         });
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         this.speed = data.player_speed || 0;
-        if (data.player_turret_y !== undefined) {
-          this.turretY = data.player_turret_y;
-        }
+        this.turretY = data.player_turret_y !== undefined ? data.player_turret_y : this.turretY;
+        this.turretX = data.player_turret_x !== undefined ? data.player_turret_x : this.turretX;
       } catch (error) {
         console.error('상태 정보 불러오기 실패:', error);
       }
       this.statusPollingInterval = setTimeout(this.startSpeedPolling, 100);
+    },
+    async startInfoPolling() { // 추가: startInfoPolling 메서드
+      try {
+        const res = await fetch(`${this.apiServerUrl}/info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            playerTurretX: this.turretX,
+            playerTurretY: this.turretY,
+            playerSpeed: this.speed,
+            playerPos: this.position,
+            playerHealth: 100, // 예시 값
+            enemyHealth: 100,  // 예시 값
+            distance: 0        // 예시 값
+          })
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        console.log('Info updated:', data);
+      } catch (error) {
+        console.error('Info polling failed:', error);
+      }
+      this.infoPollingInterval = setTimeout(this.startInfoPolling, 100);
     },
     lockGunAngle() {
       this.lockedAngle = this.currentAngle;
@@ -304,6 +327,9 @@ export default {
     }
     if (this.statusPollingInterval) {
       clearTimeout(this.statusPollingInterval);
+    }
+    if (this.infoPollingInterval) { // 추가: infoPollingInterval 정리
+      clearTimeout(this.infoPollingInterval);
     }
   }
 }
