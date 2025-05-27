@@ -85,6 +85,7 @@ cropped_images_lock = threading.Lock()
 move_command_queue = []
 horizontal_command_queue = []
 vertical_command_queue = []
+fire = []
 bullet_logs = []
 turret_pitch_angle = 0.0
 gear_level = 2
@@ -132,38 +133,74 @@ async def dashboard(request: Request):
 
 # 📌 키 입력 처리
 @app.post("/input_key")
-async def input_key(key: str = Form(...)):
-    global gear_level
+async def input_key(data: dict):
+    key = data.get("key")
+    action = data.get("action")
+    if not key or not action:
+        raise HTTPException(status_code=400, detail="key 또는 action이 누락됨")
+    
+    print(f"받은 데이터: {data}")
+    global move_command_queue,horizontal_command_queue,vertical_command_queue, gear_level, fire
     if key in ["W", "A", "S", "D"]:
-        move_command_queue.append({"move": key, "weight": gear_weights[gear_level]})
-    elif key == "P" and gear_level < 3:
-        gear_level += 1
-    elif key == "L" and gear_level > 1:
-        gear_level -= 1
-    return {"gear": gear_level}
+        if action == "down":
+            move_command_queue.append({"move": key, "weight": gear_weights[gear_level]})
+            print(f"이동 큐 업데이트: {move_command_queue}")
+        elif action == "up":
+            move_command_queue.clear()
+            move_command_queue.append({"move": "STOP"})
+            print(f"이동 큐 초기화 및 업데이트: {move_command_queue}")
+    elif key in ["Q", "E"]:
+        if action == "down":
+            horizontal_command_queue.append({"turret": key, "weight": 1.0})
+            print(f"수평 큐 업데이트: {horizontal_command_queue}")
+        elif action == "up":
+            horizontal_command_queue.clear()
+            horizontal_command_queue.append({"turret": "STOP"})
+            print(f"수평 큐 초기화 및 업데이트: {horizontal_command_queue}")
+    elif key in ["R", "F"]:
+        if action == "down":
+            vertical_command_queue.append({"turret": key, "weight": 1.0})
+            print(f"수직 큐 업데이트: {vertical_command_queue}")
+        elif action == "up":
+            vertical_command_queue.clear()
+            vertical_command_queue.append({"turret": "STOP"})
+            print(f"수직 큐 초기화 및 업데이트: {vertical_command_queue}")
+    elif action == "down":
+        if key == " ":
+            fire.append({"turret": "FIRE"})
+            print(f"발사 큐 업데이트: {fire}")
+        elif key == "P" and gear_level < 3:
+            gear_level += 1
+            print(f"기어 증가: {gear_level}")
+        elif key == "L" and gear_level > 1:
+            gear_level -= 1
+            print(f"기어 감소: {gear_level}")
+    return {"status": "success", "gear_level": gear_level}
 
 # 📌 이동 명령 요청
 @app.get("/get_move")
 async def get_move():
+    global move_command_queue
     if move_command_queue:
-        return move_command_queue.pop(0)
-    return {"move": "STOP", "weight": 1.0}
+        command = move_command_queue.pop(0)
+        print(f"이동 명령: {command}")
+        return command 
+    return {"move": "STOP"}
 
 # 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action():
-    global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET
-    if last_turret_y is not None:
-        error = TARGET - last_turret_y
-        direction = "R" if error > 0 else "F"
-        w = min(0.15 * abs(error), 1.0)
-        vertical_command_queue.clear()
-        vertical_command_queue.append({"turret": direction, "weight": w})
-    if horizontal_command_queue:
-        return horizontal_command_queue.pop(0)
+    global vertical_command_queue, horizontal_command_queue, fire
     if vertical_command_queue:
+        print(f"수직 명령: {vertical_command_queue}")
         return vertical_command_queue.pop(0)
-    return {"turret": " ", "weight": 0.0}
+    elif horizontal_command_queue:
+        print(f"수평 명령: {horizontal_command_queue}")
+        return horizontal_command_queue.pop(0)
+    elif fire:
+        print(f"발사 명령: {fire}")
+        return fire.pop(0)
+    return {"turret": "STOP"}
 
 # 📌 객체 감지 결과 제공
 @app.get("/get_detected_objects")
