@@ -4,6 +4,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # KMP 라이브러리 중복 로드
 # FastAPI 관련 임포트
 from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 # YOLO 객체 감지 관련
@@ -14,7 +15,7 @@ from models.detect import process_image_array
 from pathlib import Path
 import logging
 from typing import List, Dict, Optional
-
+import math
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO, 
@@ -41,7 +42,8 @@ import tensorflow as tf
 ############################################################
 
 BASE_DIR = Path(__file__).resolve().parent
-EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # 사용하지 않으므로 주석 처리
+
+EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"
 TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
 app = FastAPI()
 
@@ -98,6 +100,8 @@ simulator_status = {
     "player_health": 100,
     "enemy_health": 100,
     "distance": 0,
+    "is_info_received": False,
+    "last_info_time": 0,
     "player_turret_y": 0.0,
     "player_turret_x": 0.0,
     "turret_pitch": 0.0
@@ -105,7 +109,17 @@ simulator_status = {
 def set_target(val: float):
     global TARGET
     TARGET = val
-    
+
+# 우선순위 계산을 위한 가중치 정의
+DIRECTION_WEIGHT = 0.9
+SIZE_WEIGHT = 0.07
+DISTANCE_WEIGHT = 0.03
+direction_weights = {
+    "enemy_front": 1.0,
+    "enemy_side": 0.4,
+    "enemy_rear": 0.2,
+    "unknown": 0.0
+}  
 
 ############################################################
 # 🌐 FastAPI 엔드포인트
@@ -151,14 +165,15 @@ async def get_action():
         return vertical_command_queue.pop(0)
     return {"turret": " ", "weight": 0.0}
 
-# 📌 객체 감지 결과 제공 (기존 GET 엔드포인트)
+# 📌 객체 감지 결과 제공
 @app.get("/get_detected_objects")
 async def get_detected_objects():
     return {
+        "roi": None,  # ROI 미정의
         "objects": detected_objects
     }
 
-# 📌 클라이언트 이미지로 객체 감지 (새 POST 엔드포인트)
+# 📌 클라이언트 이미지로 객체 감지
 @app.post("/detect_objects")
 async def detect_objects_from_client(image: UploadFile = File(...)):
     try:
@@ -197,7 +212,6 @@ async def detect_objects_from_client(image: UploadFile = File(...)):
         logger.error(f"❌ 객체 감지 오류: {str(e)}")
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
 
-
 async def process_crop_batch_async(crop_imgs: List[np.ndarray], track_ids: List[int], pending_objects: Dict, confirmed_objects: List):
     """
     배치 크롭 이미지 처리 (EfficientNet)
@@ -233,29 +247,68 @@ async def process_crop_batch_async(crop_imgs: List[np.ndarray], track_ids: List[
                 confirmed_objects.append(obj)
     except Exception as e:
         logger.error(f"배치 크롭 이미지 처리 오류: {str(e)}")
-        
+
 def calculate_priorities(objects: List[Dict]) -> List[Dict]:
     """
     우선순위 계산
+    - 방향 (앞 > 옆 > 뒤)
+    - 바운딩 박스 세로 길이 제곱
+    - 직선 (x=712, y=245~1032)으로부터의 수직 거리 (가까울수록 높음)
+    
+    Args:
+        objects: 탐지된 객체 리스트, 각 객체는 className, bbox, direction 등을 포함
+    
+    Returns:
+        우선순위가 계산된 객체 리스트 (priority_score와 rank 포함)
     """
     try:
-        threat_weights = {"LEVEL 3": 3, "LEVEL 2": 2, "LEVEL 1": 1, "Normal": 0}
+        if not objects:
+            return objects
+
+        # 직선 기준점 (AutoHotkey 좌표)
+        line_x = 712  # 직선 x=712
+        max_distance = 1280  # 화면 너비로 최대 거리 설정 (임의로 1280 사용)
+        max_height = max((obj["bbox"][3] - obj["bbox"][1]) for obj in objects) if objects else 1
+
+        # 우선순위 점수 계산
+        updated_objects = []
         for obj in objects:
-            threat_level = obj.get("threat", "Normal")
-            confidence = obj.get("confidence", 0.0)
-            direction_conf = obj.get("direction_confidence", 0.0)
-            priority_score = threat_weights.get(threat_level, 0) * (confidence + direction_conf)
-            obj["priority_score"] = priority_score
-        sorted_objects = sorted(objects, key=lambda x: x.get("priority_score", 0), reverse=True)
+            # 1. 방향 점수
+            direction = obj.get("direction", "unknown") if obj.get("className") == "enemy" else obj.get("className", "unknown")
+            dir_score = direction_weights.get(direction, 0.0)
+
+            # 2. 바운딩 박스 세로 길이 제곱
+            x1, y1, x2, y2 = obj.get("bbox", [0, 0, 0, 0])
+            height = y2 - y1
+            size_score = (height ** 2) / (max_height ** 2) if max_height > 0 else 0.0
+
+            # 3. 직선(x=712)으로부터의 수직 거리
+            box_center_x = (x1 + x2) / 2
+            distance = abs(box_center_x - line_x)
+            distance_score = 1.0 - (distance / max_distance) if max_distance > 0 else 0.0
+
+            # 4. 최종 우선순위 점수
+            total_score = (
+                DIRECTION_WEIGHT * dir_score +
+                SIZE_WEIGHT * size_score +
+                DISTANCE_WEIGHT * distance_score
+            )
+            obj["priority_score"] = total_score
+            updated_objects.append(obj)
+
+        # 점수 기준으로 정렬하고 rank 부여
+        sorted_objects = sorted(updated_objects, key=lambda x: x.get("priority_score", 0), reverse=True)
         for rank, obj in enumerate(sorted_objects, 1):
             obj["rank"] = rank
+
         return sorted_objects
+
     except Exception as e:
         logger.error(f"우선순위 계산 오류: {str(e)}")
         return objects
 
 @app.post("/detect_objects_with_postprocessing")
-async def detect_objects_with_postprocessing():
+async def detect_objects_with_postprocessing(image: UploadFile = File(...)):
     try:
         logger.info("==== 객체 감지 후처리 요청 수신 ====")
         start_time = time.time()
@@ -287,18 +340,17 @@ async def detect_objects_with_postprocessing():
         ]
         local_processed_objects = confirmed_objects + remaining_objects
 
-        ####### ==== 중복 제거 추가 ==== #######
-        # track_id 기준으로 가장 마지막 객체만 남김
+        # track_id 기준으로 중복 제거
         unique_objects = {}
         for obj in local_processed_objects:
             tid = obj.get("track_id")
             if tid is not None:
                 unique_objects[tid] = obj
             else:
-                # track_id 없는 객체는 hash로 분리
                 unique_objects[id(obj)] = obj
         local_processed_objects = list(unique_objects.values())
-        ####### ===================== #######
+
+        # 우선순위 계산
         local_processed_objects = calculate_priorities(local_processed_objects)
         with cropped_images_lock:
             detected_objects[:] = local_processed_objects
@@ -312,9 +364,7 @@ async def detect_objects_with_postprocessing():
         logger.error(f"❌ 객체 감지 및 후처리 오류: {str(e)}")
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
 
-
-
-# 📌 상태 정보 제공 (HUD.js가 사용)
+# 📌 상태 정보 제공
 @app.get("/get_status")
 async def get_status():
     simulator_status["turret_pitch"] = turret_pitch_angle
@@ -333,6 +383,8 @@ async def receive_simulator_info(request: Request):
     simulator_status["player_health"] = data.get("playerHealth", simulator_status["player_health"])
     simulator_status["enemy_health"] = data.get("enemyHealth", simulator_status["enemy_health"])
     simulator_status["distance"] = data.get("distance", simulator_status["distance"])
+    simulator_status["is_info_received"] = True
+    simulator_status["last_info_time"] = time.time()
     simulator_status["player_turret_y"] = data.get("playerTurretY", simulator_status["player_turret_y"])
     simulator_status["player_turret_x"] = data.get("playerTurretX", simulator_status["player_turret_x"])
     return {"status": "success"}
