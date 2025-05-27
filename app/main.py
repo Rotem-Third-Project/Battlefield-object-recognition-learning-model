@@ -4,8 +4,6 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"  # KMP 라이브러리 중복 로드
 # FastAPI 관련 임포트
 from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile
 from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # YOLO 객체 감지 관련
@@ -43,7 +41,6 @@ import tensorflow as tf
 ############################################################
 
 BASE_DIR = Path(__file__).resolve().parent
-CROSSHAIR_PATH = BASE_DIR / "static" / "img" / "crosshair.png"
 EFFICIENTNET_MODEL_PATH = BASE_DIR / "models" / "Efficientnet_weights" / "30000Efficient_weight.h5"  # 사용하지 않으므로 주석 처리
 TEMP_PATH = BASE_DIR / "tmp" / "temp.jpg"
 app = FastAPI()
@@ -62,12 +59,7 @@ app.add_middleware(
 # 앱 시작 시 로그
 logger.info("🚀 서버 초기화 중...")
 logger.info(f"📁 작업 디렉토리: {BASE_DIR}")
-logger.info(f"🎯 크로스헤어 경로: {CROSSHAIR_PATH}")
 logger.info(f"💾 임시 파일 경로: {TEMP_PATH}")
-
-# 프론트엔드 리소스 설정
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 # YOLO 모델 로드
 try:
