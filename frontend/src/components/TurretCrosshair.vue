@@ -1,42 +1,50 @@
 <template>
   <div class="hud-container">
-    <!-- 수평 나침반 (turret_X) -->
-    <div class="compass-x">
-      <div class="center-line"></div>
-      <!-- 왼쪽 눈금 -->
-      <div
-        class="compass left"
-        :style="{ transform: `translateX(-50%) translateX(${-turretX * markerSpacing}px)` }"
-      >
+    <!-- PUBG 스타일 나침반 (기존 수평 나침반 자리로 이동) -->
+    <div class="pubg-compass">
+      <div class="compass-wrapper">
         <div
-          class="marker"
-          v-for="deg in leftMarkers"
-          :key="deg"
-          :style="{ 
-            left: `${deg * markerSpacing}px`,
-            opacity: getMarkerOpacity(deg, true)
-          }"
+          class="compass"
+          :style="{ transform: `translateX(${-turretX * markerSpacing}px)` }"
         >
-          {{ Math.abs(deg) % 90 === 0 ? Math.abs(deg) : "|" }}
+          <!-- 각도 마커 -->
+          <div
+            class="marker"
+            v-for="deg in markers"
+            :key="deg"
+            :style="{ left: `${deg * markerSpacing}px` }"
+          >
+            <!-- 주요 방향 (N, E, S, W) 표시 -->
+            <span v-if="deg % 90 === 0" class="degree-label">
+              {{ deg === 0 ? 'N' : deg === 90 ? 'E' : deg === 180 ? 'S' : 'W' }}
+            </span>
+            <!-- 30도 단위로 숫자 표시 -->
+            <span v-else-if="deg % 30 === 0" class="degree-number">
+              {{ deg }}
+            </span>
+            <!-- 10도 단위로 흰색 | 표시 -->
+            <span v-else-if="deg % 10 === 0" class="minor-tick">|</span>
+            <!-- 5도 단위로 작은 점 표시 -->
+            <span v-else-if="deg % 5 === 0" class="tiny-tick">.</span>
+          </div>
         </div>
       </div>
-      <!-- 오른쪽 눈금 -->
-      <div
-        class="compass right"
-        :style="{ transform: `translateX(-50%) translateX(${-turretX * markerSpacing}px)` }"
-      >
-        <div
-          class="marker"
-          v-for="deg in rightMarkers"
-          :key="deg"
-          :style="{ 
-            left: `${deg * markerSpacing}px`,
-            opacity: getMarkerOpacity(deg, false)
-          }"
-        >
-          {{ deg % 90 === 0 ? deg : "|" }}
-        </div>
-      </div>
+      <!-- 중앙 포인터 -->
+      <div class="center-pointer"></div>
+    </div>
+
+    <!-- 속도계 (왼쪽 하단 복원) -->
+    <div v-if="showSpeedGauge && speed !== undefined" class="speed-gauge">
+      <svg width="80" height="80" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#333" stroke-width="10"/>
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#00ff00" stroke-width="10"
+          :stroke-dasharray="`${(speed / maxSpeed) * 251.2}, 251.2`"
+          transform="rotate(-90 50 50)"/>
+        <text x="50" y="55" text-anchor="middle" fill="#fff" font-size="20">
+          {{ Math.round(speed) }}
+        </text>
+        <text x="50" y="70" text-anchor="middle" fill="#fff" font-size="10">km/h</text>
+      </svg>
     </div>
 
     <!-- 수직 눈금 (turret_Y) -->
@@ -81,22 +89,32 @@ export default {
     lockedAngle: {
       type: Number,
       default: null
+    },
+    speed: { // 속도계 prop 추가
+      type: Number,
+      default: undefined
+    },
+    maxSpeed: {
+      type: Number,
+      default: 100
+    },
+    showSpeedGauge: {
+      type: Boolean,
+      default: true
     }
   },
   computed: {
     degreeMarks() {
       return [10, 5, 0, -5];
     },
-    leftMarkers() {
-      return Array.from({ length: 180 }, (_, i) => -(180 - i));
-    },
-    rightMarkers() {
-      return Array.from({ length: 180 }, (_, i) => i);
+    markers() {
+      // PUBG 스타일 나침반을 위한 0°에서 360°까지 마커 생성
+      return Array.from({ length: 361 }, (_, i) => i);
     }
   },
   data() {
     return {
-      markerSpacing: 20,
+      markerSpacing: 10 // 각도 1도당 10px 이동
     }
   },
   methods: {
@@ -105,10 +123,9 @@ export default {
       return ((max - angle) / (max - min)) * 100;
     },
     getMarkerOpacity(deg, isLeft) {
-      const fadeStart = 160; // 페이드 시작할 각도
-      const maxDeg = 180; // 최대 각도
+      const fadeStart = 160;
+      const maxDeg = 180;
       const absDeg = Math.abs(deg);
-      
       if (absDeg > fadeStart) {
         return 1 - ((absDeg - fadeStart) / (maxDeg - fadeStart));
       }
@@ -126,41 +143,88 @@ export default {
   pointer-events: none;
 }
 
-/* 수평 나침반 */
-.compass-x {
+/* PUBG 스타일 나침반 (기존 수평 나침반 자리로 이동) */
+.pubg-compass {
   position: absolute;
-  bottom: 40px;
-  width: 60%;
-  height: 60px;
+  bottom: 40px; /* 기존 수평 나침반 위치 */
+  width: 60%; /* 기존 수평 나침반 너비 */
+  height: 60px; /* 기존 수평 나침반 높이 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
   overflow: hidden;
   left: 50%;
   transform: translateX(-50%);
 }
 
-.center-line {
-  position: absolute;
-  left: 50%;
-  width: 2px;
-  height: 50%;
-  background: red;
-  z-index: 2;
+.compass-wrapper {
+  position: relative;
+  width: 100%; /* 기존 수평 나침반과 동일한 너비 */
+  height: 100%;
+  overflow: hidden;
 }
 
 .compass {
   position: absolute;
-  top: 20px;
+  top: 20px; /* 기존 수평 나침반과 동일한 위치 */
   left: 50%;
+  transform: translateX(-50%);
   white-space: nowrap;
-  transition: transform 0.05s linear;
+  transition: transform 0.1s ease-out;
 }
 
 .marker {
   position: absolute;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
-  width: 40px;
+  width: 20px;
   text-align: center;
-  transition: opacity 0.2s ease;
+  transform: translateX(-50%);
+}
+
+.degree-label {
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+}
+
+.degree-number {
+  color: #fff;
+  font-size: 12px;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+.minor-tick {
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+.tiny-tick {
+  color: #fff;
+  font-size: 10px;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.center-pointer {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+  background: #ffcc00;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+/* 속도계 스타일 (왼쪽 하단) */
+.speed-gauge {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 80px;
+  height: 80px;
+  z-index: 10;
+  pointer-events: none;
 }
 
 /* 수직 각도 (turret_Y) */
@@ -237,6 +301,26 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .compass-wrapper {
+    width: 70%;
+  }
+
+  .degree-label {
+    font-size: 14px;
+  }
+
+  .degree-number {
+    font-size: 10px;
+  }
+
+  .minor-tick {
+    font-size: 12px;
+  }
+
+  .tiny-tick {
+    font-size: 8px;
+  }
+
   .marker {
     font-size: 12px;
     width: 30px;
