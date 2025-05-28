@@ -42,64 +42,68 @@ export default {
   data() {
     return {
       gearLevel: 2,
+      lastAction: null,
+      position: { x: 0, y: 0, z: 0 },
+      turret: { x: 0, y: 0 },
+      wsControl: null
     };
   },
   mounted() {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
-    this.fetchMove();
+    this.connectControlWebSocket();
     this.fetchAction();
   },
   beforeDestroy() {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+    if (this.wsControl) this.wsControl.close();
   },
   methods: {
+    connectControlWebSocket() {
+      const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.hostname + ':5000/input_key';
+      this.wsControl = new WebSocket(wsUrl);
+      this.wsControl.onclose = () => {
+        setTimeout(this.connectControlWebSocket, 1000);
+      };
+    },
     handleKeyDown(event) {
       this.sendKeyAction(event, 'down');
     },
     handleKeyUp(event) {
       this.sendKeyAction(event, 'up');
     },
-    async sendKeyAction(event, action) {
+    sendKeyAction(event, action) {
       const keyMap = {
         'w': 'W', 'a': 'A', 's': 'S', 'd': 'D',
         'q': 'Q', 'e': 'E', 'r': 'R', 'f': 'F',
-        ' ': ' ',
+        ' ': ' ', 'p': 'P', 'l': 'L',
       };
       const key = keyMap[event.key.toLowerCase()];
-      if (key) {
+      if (key && this.wsControl && this.wsControl.readyState === 1) {
         try {
-          await axios.post('http://localhost:5000/input_key', { key, action });
-          console.log('키 전송 성공:', { key, action });
+          this.wsControl.send(JSON.stringify({ key, action }));
         } catch (error) {
-          console.error('키 전송 실패:', error);
+          console.error('WebSocket 키 전송 실패:', error);
         }
       }
     },
-    async fetchMove() {
-      try {
-        const response = await axios.get('http://localhost:5000/get_move');
-        console.log('이동:', response.data);
-      } catch (error) {
-        console.error('이동 요청 실패:', error);
-      }
-      setTimeout(this.fetchMove, 500);
-    },
     async fetchAction() {
       try {
-        const response = await axios.get('http://localhost:5000/get_action');
+        const response = await axios.post('http://localhost:5000/get_action', {
+          position: this.position,
+          turret: this.turret
+        });
+        this.lastAction = response.data;
         console.log('액션:', response.data);
       } catch (error) {
         console.error('액션 요청 실패:', error);
       }
       setTimeout(this.fetchAction, 500);
     }
-  }
+  },
 };
 </script>
-
-
 <style>
 pre {
   background: #f4f4f4;
