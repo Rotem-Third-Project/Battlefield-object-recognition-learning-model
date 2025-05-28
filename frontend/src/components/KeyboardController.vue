@@ -1,6 +1,6 @@
 <template>
-    <div class="tank-control">
-    </div>
+  <div class="tank-control">
+  </div>
 </template>
 
 <!-- 
@@ -77,6 +77,7 @@ export default {
       const keyMap = {
         'w': 'W', 'a': 'A', 's': 'S', 'd': 'D',
         'q': 'Q', 'e': 'E', 'r': 'R', 'f': 'F',
+        'p': 'P', 'l': 'L', ' ': ' ',
         ' ': ' ', 'p': 'P', 'l': 'L',
       };
       const key = keyMap[event.key.toLowerCase()];

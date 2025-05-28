@@ -194,7 +194,7 @@ export default {
   flex-direction: row;
   width: 100%;
   height: calc(100vh - 80px);
-  margin-top: 80px;
+  margin-top: 10px;
   overflow: hidden;
   box-sizing: border-box;
 }

@@ -126,11 +126,6 @@ direction_weights = {
 # 🌐 FastAPI 엔드포인트
 ############################################################
 
-# 📌 대시보드 렌더
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
-
 # 📌 키 입력 처리
 @app.post("/input_key")
 async def input_key(data: dict):
@@ -190,7 +185,8 @@ async def get_move():
 # 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action():
-    global vertical_command_queue, horizontal_command_queue, fire
+    global detected_objects, vertical_command_queue, horizontal_command_queue, fire, TARGET, last_turret_y
+    logger.info(f"get_action 실행 중")
     if vertical_command_queue:
         print(f"수직 명령: {vertical_command_queue}")
         return vertical_command_queue.pop(0)
@@ -200,7 +196,15 @@ async def get_action():
     elif fire:
         print(f"발사 명령: {fire}")
         return fire.pop(0)
+    elif detected_objects:
+        #last_turret_y이 포신 자동제어 문제 생김
+        error = TARGET - last_turret_y #detected_objects[0]["y"]
+        direction = "R" if error > 0 else "F"
+        w = min(0.15 * abs(error), 1.0)
+        vertical_command_queue.clear()
+        vertical_command_queue.append({"turret": direction, "weight": w}) 
     return {"turret": "STOP"}
+
 
 # 📌 객체 감지 결과 제공
 @app.get("/get_detected_objects")

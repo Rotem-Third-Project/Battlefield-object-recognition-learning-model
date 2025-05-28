@@ -14,4 +14,12 @@ Thumbs.db    # Windows
 
 # 🔐 민감한 정보가 담긴 환경 설정 파일
 .env
-# node_modules  # 주석 처리하여 Git에 포함
+node_modules/
+
+# Log files
+*.log
+
+# Cache
+.cache/
+*.cache
+*.eslintcache
