@@ -126,11 +126,6 @@ direction_weights = {
 # 🌐 FastAPI 엔드포인트
 ############################################################
 
-# 📌 대시보드 렌더
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
-
 # 📌 키 입력 처리
 @app.post("/input_key")
 async def input_key(data: dict):
