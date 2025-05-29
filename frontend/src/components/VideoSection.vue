@@ -13,9 +13,6 @@
 
       <!-- ✅ 오버레이 요소들 -->
       <div class="video-overlay">
-        <div v-if="autoAimStatus" class="auto-aim-status">
-          {{ autoAimStatus }}
-        </div>
         <CrosshairCanvas v-if="videoMounted && showCrosshair" />
         <SpeedGauge
           :speed="speed"
@@ -94,6 +91,10 @@ export default {
       type: Boolean,
       default: true
     },
+    turretX: {
+      type: Number,
+      default: 0
+    },
     signal: {
       type: Number,
       default: 0
@@ -117,13 +118,12 @@ export default {
       apiServerUrl: '',
       speed: 0,
       statusPollingInterval: null,
-      infoPollingInterval: null,
+      infoPollingInterval: null, // 추가: infoPollingInterval
       currentAngle: 0,
       lockedAngle: null,
       signal: 0,
       turretY: 0,
-      turretX: 0,
-      autoAimStatus: '',
+      turretX: 0, // 추가: turretX를 data에 추가하여 동적으로 관리
     }
   },
   computed: {
@@ -282,24 +282,6 @@ export default {
         this.speed = data.player_speed || 0;
         this.turretY = data.player_turret_y !== undefined ? data.player_turret_y : this.turretY;
         this.turretX = data.player_turret_x !== undefined ? data.player_turret_x : this.turretX;
-        
-        // dx_from_barrel 값 확인 및 자동 조준 상태 업데이트
-        const dxFromBarrel = data.dx_from_barrel || 100;
-        if (data.error !== undefined && Math.abs(data.error) < 0.01 && data.error !== 10.0) {
-          if (Math.abs(dxFromBarrel) <= 10) { // TOLERANCE 값과 동일하게 설정
-            console.log(`🎯 자동 조준 완료: ${data.error}, dx_from_barrel: ${dxFromBarrel}`);
-            this.autoAimStatus = '자동조준 완료';
-          } else {
-            console.log(`🎯 수평 조준 필요: dx_from_barrel: ${dxFromBarrel}`);
-            this.autoAimStatus = '수평 조준 진행중';
-          }
-        } else {
-          console.log(`🎯 자동 조준 실패: ${data.error}`);
-          this.autoAimStatus = '';
-        }
-        
-        this.currentAngle = data.player_turret_x || 0;
-        this.lockedAngle = data.locked_angle || null;
       } catch (error) {
         console.error('상태 정보 불러오기 실패:', error);
       }
@@ -456,27 +438,5 @@ export default {
 }
 .retry-button:hover {
   background-color: #00cc00;
-}
-
-.auto-aim-status {
-  position: absolute;
-  top: 30px;         /* 화면 상단에서 30px */
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 255, 0, 0.85); /* 연한 녹색 배경 */
-  color: #000;
-  padding: 10px 28px;
-  border-radius: 22px;
-  font-size: 24px;
-  font-weight: bold;
-  z-index: 1000;
-  box-shadow: 0 0 12px #0f0;
-  border: 2px solid #0f0;
-  animation: aim-done 1s infinite alternate;
-}
-
-@keyframes aim-done {
-  0% { box-shadow: 0 0 12px #0f0; }
-  100% { box-shadow: 0 0 22px #8f8; }
 }
 </style>
