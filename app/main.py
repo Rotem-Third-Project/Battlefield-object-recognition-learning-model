@@ -22,15 +22,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="tmp")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-<<<<<<< HEAD
 model = YOLO(BASE_DIR / "models" / "best.pt")
-=======
-<<<<<<< HEAD
-model = YOLO(BASE_DIR / "models" / "best.pt")
-=======
-model = YOLO(BASE_DIR / "models" / "10000_best.pt")
->>>>>>> bf74bddf7c3a0e22f583c1feff90b9e5a3f2bc25
->>>>>>> 767ed6642b88c5287aa426c32c5c5530489a2b38
 
 move_command_queue = []
 action_command_queue = []
@@ -93,60 +85,72 @@ async def get_action():
 
 @app.post("/detect")
 async def detect(image: UploadFile = File(...)):
+    global detected_objects
     try:
+        start_time = time.time()  # 처리 시작 시간 기록
+        
         image_bytes = await image.read()
         np_arr = np.frombuffer(image_bytes, np.uint8)
         img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         results = list(model.predict(img_cv, verbose=False, stream=True))
         detections = results[0].boxes.data.cpu().numpy()
+        
+        target_classes = {0: "enemy", 2: "car", 7: "truck", 15: "rock"}
+        filtered_results = []
+
+        crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
+        crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
+
+        for idx, box in enumerate(detections):
+            class_id = int(box[5])
+            if class_id in target_classes:
+                x1, y1, x2, y2 = map(int, box[:4])
+                confidence = float(box[4])
+                class_name = target_classes[class_id]
+
+                cx = (x1 + x2) // 2
+                cy = (y1 + y2) // 2
+                h, w = crosshair.shape[:2]
+                x_offset = max(cx - w // 2, 0)
+                y_offset = max(cy - h // 2, 0)
+
+                for c in range(3):
+                    alpha_s = crosshair[:, :, 3] / 255.0
+                    alpha_l = 1.0 - alpha_s
+                    for i in range(h):
+                        for j in range(w):
+                            if y_offset + i < img_cv.shape[0] and x_offset + j < img_cv.shape[1]:
+                                img_cv[y_offset + i, x_offset + j, c] = (
+                                    alpha_s[i, j] * crosshair[i, j, c] +
+                                    alpha_l[i, j] * img_cv[y_offset + i, x_offset + j, c]
+                                )
+
+                filtered_results.append({
+                    'className': class_name,
+                    'id': idx,
+                    'threat': "Normal",
+                    'bbox': [x1, y1, x2, y2],
+                    'confidence': confidence
+                })
+
+        detected_objects.clear()
+        detected_objects.extend(filtered_results)
+
+        end_time = time.time()  # 처리 종료 시간 기록
+        processing_time = (end_time - start_time) * 1000  # 밀리초 단위로 변환
+        
+        print(f"이미지 처리 시간: {processing_time:.2f}ms")  # 콘솔에 출력
+        
+        cv2.imwrite(str(TMP_PATH), img_cv)
+
+        return JSONResponse(content={
+            "objects": detected_objects,
+            "processing_time_ms": processing_time  # 클라이언트에 처리 시간 반환
+        })
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "ERROR", "message": str(e)})
-
-    target_classes = {0: "enemy", 2: "car", 7: "truck", 15: "rock"}
-    filtered_results = []
-
-    crosshair = cv2.imread(str(CROSSHAIR_PATH), cv2.IMREAD_UNCHANGED)
-    crosshair = cv2.resize(crosshair, (65, 65), interpolation=cv2.INTER_AREA)
-
-    for idx, box in enumerate(detections):
-        class_id = int(box[5])
-        if class_id in target_classes:
-            x1, y1, x2, y2 = map(int, box[:4])
-            confidence = float(box[4])
-            class_name = target_classes[class_id]
-
-            cx = (x1 + x2) // 2
-            cy = (y1 + y2) // 2
-            h, w = crosshair.shape[:2]
-            x_offset = max(cx - w // 2, 0)
-            y_offset = max(cy - h // 2, 0)
-
-            for c in range(3):
-                alpha_s = crosshair[:, :, 3] / 255.0
-                alpha_l = 1.0 - alpha_s
-                for i in range(h):
-                    for j in range(w):
-                        if y_offset + i < img_cv.shape[0] and x_offset + j < img_cv.shape[1]:
-                            img_cv[y_offset + i, x_offset + j, c] = (
-                                alpha_s[i, j] * crosshair[i, j, c] +
-                                alpha_l[i, j] * img_cv[y_offset + i, x_offset + j, c]
-                            )
-
-            filtered_results.append({
-                'className': class_name,
-                'id': idx,
-                'threat': "Normal",
-                'bbox': [x1, y1, x2, y2],
-                'confidence': confidence
-            })
-
-    detected_objects.clear()
-    detected_objects.extend(filtered_results)
-
-    cv2.imwrite(str(TMP_PATH), img_cv)
-
-    return JSONResponse(content=filtered_results)
 
 @app.get("/get_detected_objects")
 async def get_detected_objects():
