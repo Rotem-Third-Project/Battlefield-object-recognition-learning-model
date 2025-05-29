@@ -60,28 +60,22 @@
         <ObjectList @object-selected="onObjectSelected" />
         <hr />
         <div class="toggle-box">
-          <label class="switch-container">
-            <div class="toggle-item">
-              <label class="switch">
-                <input type="checkbox" v-model="showDetections" />
-                <span class="slider round">{{
-                  showDetections ? "ON" : "OFF"
-                }}</span>
-              </label>
-            </div>
+          <label class="switch">
+            <input type="checkbox" v-model="showDetections" />
+            <span class="slider round"></span>
           </label>
-          <span class="toggle-label"
-            >📦 객체 탐지: {{ showDetections ? "표시" : "숨김" }}</span
-          >
+          <span class="toggle-label">
+            📦 객체 탐지: {{ showDetections ? "표시" : "숨김" }}
+          </span>
         </div>
         <div class="toggle-box">
           <label class="switch">
             <input type="checkbox" v-model="showCrosshair" />
-            <span class="slider round">{{ showCrosshair ? "ON" : "OFF" }}</span>
+            <span class="slider round"></span>
           </label>
-          <span class="toggle-label"
-            >🎯 조준선: {{ showCrosshair ? "표시" : "숨김" }}</span
-          >
+          <span class="toggle-label">
+            🎯 조준선: {{ showCrosshair ? "표시" : "숨김" }}
+          </span>
         </div>
       </div>
     </div>
@@ -114,7 +108,7 @@ export default {
       threat: "없음",
       showDetections: true,
       showCrosshair: true,
-      showSpeedGauge: false, // 필요 시 true
+      showSpeedGauge: false,
     };
   },
   methods: {
@@ -212,18 +206,38 @@ export default {
   padding: 10px;
   overflow-y: auto;
 }
+.toggle-box {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background-color: rgba(0, 255, 0, 0.05);
+  border: 1px solid rgba(0, 255, 0, 0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  transition: all 0.3s ease;
+}
+
+.toggle-box:hover {
+  background-color: rgba(0, 255, 0, 0.1);
+  border-color: rgba(0, 255, 0, 0.3);
+  transform: translateX(5px);
+}
+
 .switch {
   position: relative;
   display: inline-block;
-  width: 70px;
-  height: 34px;
+  width: 60px;
+  height: 30px;
   margin-right: 10px;
 }
+
 .switch input {
   opacity: 0;
   width: 0;
   height: 0;
 }
+
 .slider {
   position: absolute;
   cursor: pointer;
@@ -231,49 +245,40 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
-  color: white;
-  font-weight: bold;
-  font-family: sans-serif;
-  font-size: 16px;
-  text-align: center;
-  line-height: 34px;
+  background-color: #2c2c2c;
   transition: 0.4s;
-  border-radius: 34px;
+  border: 2px solid rgba(0, 255, 0, 0.3);
 }
+
+.slider.round {
+  border-radius: 30px;
+}
+
 .slider.round:before {
   position: absolute;
   content: "";
-  height: 26px;
-  width: 26px;
-  left: 4px;
-  bottom: 4px;
+  height: 22px;
+  width: 22px;
+  left: 2px;
+  bottom: 2px;
   background-color: white;
   transition: 0.4s;
   border-radius: 50%;
 }
+
 .switch input:checked + .slider {
   background-color: #00ff99;
-  color: white;
+  border-color: #00ff99;
 }
-.switch input:checked + .slider.round:before {
-  transform: translateX(36px);
+
+.switch input:checked + .slider:before {
+  transform: translateX(30px);
 }
-.toggle-item {
-  margin-bottom: 10px;
-}
-.toggle-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin: 10px 0;
-}
+
 .toggle-label {
-  font-size: 14px;
-  color: white;
+  font-size: 16px;
+  color: #00ff99;
+  font-weight: 500;
+  user-select: none;
 }
 </style>
