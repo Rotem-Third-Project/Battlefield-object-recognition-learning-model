@@ -138,8 +138,8 @@ SIZE_WEIGHT = 0.07
 DISTANCE_WEIGHT = 0.03
 direction_weights = {
     "enemy_front": 1.0,
-    "enemy_side": 0.4,
-    "enemy_rear": 0.2,
+    "enemy_side": 0.5,
+    "enemy_rear": 0.25,
     "unknown": 0.0,
 }
 
