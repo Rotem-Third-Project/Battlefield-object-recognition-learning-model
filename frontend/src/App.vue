@@ -7,10 +7,11 @@
 
 <script>
 import KeyboardController from './components/KeyboardController.vue'
-
+import DashboardView from './views/DashboardView.vue'
 export default {
   components: {
-    KeyboardController
+    KeyboardController,
+    DashboardView
   }
 }
 </script>

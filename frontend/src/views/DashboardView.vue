@@ -77,12 +77,23 @@
             🎯 조준선: {{ showCrosshair ? "표시" : "숨김" }}
           </span>
         </div>
+
+        <div class="toggle-box">
+          <label class="switch">
+            <input type="checkbox" v-model="showAutoAim" @change="updateAutoAim" />
+            <span class="slider round"></span>
+          </label>
+          <span class="toggle-label">
+            🤖 자동 조준: {{ showAutoAim ? "활성" : "비활성" }}</span>
+        </div>
+
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import axios from "axios";
 import VideoSection from "@/components/VideoSection.vue";
 import ObjectList from "@/components/ObjectList.vue";
 // SpeedGauge 등 추가 컴포넌트 있으면 import
@@ -109,6 +120,7 @@ export default {
       showDetections: true,
       showCrosshair: true,
       showSpeedGauge: false,
+      showAutoAim: false, //자동 조준 초기값: 비활성
     };
   },
   methods: {
@@ -122,6 +134,19 @@ export default {
       await this.$store.dispatch("fetchProcessedObjects");
       // 디버깅용 로그
       // console.log("후처리 후 processedObjects:", this.$store.state.processedObjects);
+    },
+    
+    async updateAutoAim() {
+      try {
+        const response = await axios.post(
+          "http://localhost:5000/set_auto_aim", 
+          {
+        auto_aim: this.showAutoAim,
+      });
+      console.log("자동 조준 상태 전송:", this.showAutoAim, response.data);
+    } catch (error) {
+      console.error("자동 조준 상태 전송 실패", error);
+    }
     },
   },
 };

@@ -458,11 +458,22 @@ async def detect_objects_with_postprocessing(image: UploadFile = File(...)):
             status_code=500, content={"status": "ERROR", "message": str(e)}
         )
 
+######################### 상태 변수 추가
+is_auto_aim_enabled = False
+
+@app.post("/set_auto_aim")
+async def set_auto_aim(data: dict):
+    global is_auto_aim_enabled
+    dataset = data.get("auto_aim", False)
+    print(dataset)
+    is_auto_aim_enabled = dataset
+    logger.info(f"🤖 자동 조준 상태 업데이트: {is_auto_aim_enabled}")
+    return {"status": "success", "auto_aim": is_auto_aim_enabled}
 
 # 📌 포탑 조작 명령 요청
 @app.get("/get_action")
 async def get_action(auto_aim: bool = Query(True)):
-    global vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET, detected_objects, error1
+    global is_auto_aim_enabled, vertical_command_queue, horizontal_command_queue, last_turret_y, TARGET, detected_objects, error1
 
     logger.debug(f"🎮 get_action 호출 - detected_objects 수: {len(detected_objects)}")
 
@@ -527,7 +538,7 @@ async def get_action(auto_aim: bool = Query(True)):
 
                 logger.debug(f"🎯 Auto-aim 결과: {aim_result}")
 
-                if "error" not in aim_result:
+                if is_auto_aim_enabled == True and "error" not in aim_result:
                     horizontal_cmd = aim_result.get("horizontal_command")
                     logger.debug(
                         f"🔄 수평 명령 확인: '{horizontal_cmd}' (타입: {type(horizontal_cmd)})"
@@ -550,7 +561,7 @@ async def get_action(auto_aim: bool = Query(True)):
                 logger.error(f"❌ Auto-aim 계산 오류: {str(e)}")
 
         # 수직 조준 로직 (TARGET 기반)
-        if last_turret_y != 0.0:
+        if is_auto_aim_enabled == True and last_turret_y != 0.0:
             error = TARGET - last_turret_y
             direction = "R" if error > 0 else "F"
             w = min(0.15 * abs(error), 1.0)
